@@ -102,7 +102,37 @@ export default function App() {
           <p className="mt-6 text-base font-light tracking-wide" style={{ color: '#a09690' }}>
             Designer &amp; Developer
           </p>
-          <div className="mt-14 flex flex-col items-center gap-2" style={{ color: '#c0b8b0' }}>
+
+          {/* About */}
+          <p
+            className="mt-8 text-sm font-light leading-relaxed text-center"
+            style={{ color: '#a09690', maxWidth: 360 }}
+          >
+            Incoming SWE Intern at Microsoft · Windows &amp; Devices.
+            Exploring AI developer tooling and the intersection of fashion and technology.
+          </p>
+
+          {/* Social links — pointer-events-auto so they're clickable */}
+          <div className="mt-6 flex items-center gap-7 pointer-events-auto">
+            {[
+              { label: 'LinkedIn',  href: 'https://linkedin.com/in/dennis-kritchko' },
+              { label: 'GitHub',    href: 'https://github.com/denniskritchko'       },
+              { label: 'Instagram', href: 'https://instagram.com/kritchko'           },
+            ].map(({ label, href }) => (
+              <a
+                key={label}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs tracking-[0.18em] uppercase transition-opacity duration-300 hover:opacity-40"
+                style={{ color: '#b0a89e' }}
+              >
+                {label}
+              </a>
+            ))}
+          </div>
+
+          <div className="mt-10 flex flex-col items-center gap-2" style={{ color: '#c0b8b0' }}>
             <span className="text-xs tracking-[0.2em] uppercase">Scroll</span>
             <svg width="1" height="40" viewBox="0 0 1 40">
               <line x1="0.5" y1="0" x2="0.5" y2="40" stroke="#c8b89a" strokeWidth="1" />

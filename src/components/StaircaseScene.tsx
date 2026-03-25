@@ -113,8 +113,14 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
         let remaining = 12
         const warmup = () => {
           renderer.render(scene, camera)
-          if (--remaining > 0) requestAnimationFrame(warmup)
-          else onLoaded?.()
+          if (--remaining > 0) {
+            requestAnimationFrame(warmup)
+          } else {
+            onLoaded?.()
+            // Kick off the cinematic swoop — starts as the overlay fades out
+            swoop.active = true
+            swoop.t0     = performance.now()
+          }
         }
         requestAnimationFrame(warmup)
       })
@@ -350,31 +356,44 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
     }
     window.addEventListener('resize', onResize)
 
+    // ── Swoop intro (time-based, triggered after warmup) ──────────────────
+    const SWOOP_MS    = 2200
+    const SWOOP_FOV   = 88
+    const NORMAL_FOV  = 72
+    const swoopFromPos  = new THREE.Vector3(3, 10, 0)
+    // Look toward the outer wall, mostly horizontal — fills frame with brick
+    const swoopFromLook = new THREE.Vector3(OUTER_R - 0.4, 8, 0)
+    const swoopToPos    = new THREE.Vector3(CAMERA_R, EYE_H, 0)
+    const swoopToLook   = new THREE.Vector3(Math.cos(0.45) * 2.2, EYE_H - 0.55, Math.sin(0.45) * 2.2)
+
+    // Mutable state — lives in the closure, not React state
+    const swoop = { active: false, t0: 0 }
+
     // ── Animation loop ────────────────────────────────────────────────────
     let frameId: number
     const tmpLook = new THREE.Vector3()
-    const startPos = new THREE.Vector3(4, 18, 8)
-    const entryPos = new THREE.Vector3(CAMERA_R, EYE_H, 0)
 
     const animate = () => {
       frameId = requestAnimationFrame(animate)
 
-      const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
-      const overall   = Math.min(scroll.y / maxScroll, 1)
+      if (swoop.active) {
+        // ── Swoop: time-driven cinematic intro ────────────────────────────
+        const raw   = Math.min((performance.now() - swoop.t0) / SWOOP_MS, 1)
+        const t     = 1 - Math.pow(1 - raw, 3)   // easeOutCubic — fast then settle
 
-      if (overall < INTRO_END) {
-        // ── Phase 1: bird's-eye zoom-in ──────────────────────────────────
-        const t = easeInOut(overall / INTRO_END)
-        camera.position.lerpVectors(startPos, entryPos, t)
-        tmpLook.set(
-          THREE.MathUtils.lerp(0, Math.cos(0.4) * 2, t),
-          THREE.MathUtils.lerp(2, EYE_H - 0.5, t),
-          THREE.MathUtils.lerp(0, Math.sin(0.4) * 2, t),
-        )
+        camera.position.lerpVectors(swoopFromPos, swoopToPos, t)
+        tmpLook.lerpVectors(swoopFromLook, swoopToLook, t)
         camera.lookAt(tmpLook)
+        camera.fov = THREE.MathUtils.lerp(SWOOP_FOV, NORMAL_FOV, t)
+        camera.updateProjectionMatrix()
+
+        if (raw >= 1) swoop.active = false
+
       } else {
-        // ── Phase 2: helix descent ────────────────────────────────────────
-        const p     = (overall - INTRO_END) / (1 - INTRO_END)
+        // ── Scroll-driven camera ──────────────────────────────────────────
+        const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
+        const overall   = Math.min(scroll.y / maxScroll, 1)
+        const p     = overall
         const angle = p * TOTAL_REVS * Math.PI * 2
         const depth = p * TOTAL_DEPTH
 
@@ -388,6 +407,12 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
           -depth + EYE_H - 0.55,
           Math.sin(angle + 0.45) * 2.2,
         )
+
+        // Reset FOV in case it drifted
+        if (camera.fov !== NORMAL_FOV) {
+          camera.fov = NORMAL_FOV
+          camera.updateProjectionMatrix()
+        }
       }
 
       renderer.render(scene, camera)
