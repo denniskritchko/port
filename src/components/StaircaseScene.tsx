@@ -102,7 +102,19 @@ export default function StaircaseScene({ onProgress, onLoaded }: Props) {
     // ── Materials ─────────────────────────────────────────────────────────
     const manager = new THREE.LoadingManager()
     manager.onProgress = (_url, loaded, total) => onProgress?.(loaded / total)
-    manager.onLoad     = () => renderer.compileAsync(scene, camera).then(() => onLoaded?.())
+    manager.onLoad     = () => {
+      renderer.compileAsync(scene, camera).then(() => {
+        // Render several frames behind the overlay to flush all lazy GPU uploads
+        // before revealing the scene to the user.
+        let remaining = 12
+        const warmup = () => {
+          renderer.render(scene, camera)
+          if (--remaining > 0) requestAnimationFrame(warmup)
+          else onLoaded?.()
+        }
+        requestAnimationFrame(warmup)
+      })
+    }
 
     const tl  = new THREE.TextureLoader(manager)
     const exr = new EXRLoader(manager)
