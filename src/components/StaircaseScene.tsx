@@ -38,10 +38,11 @@ function easeInOut(t: number) {
 
 interface Props {
   onProgress?: (p: number) => void
+  onStage?:    (stage: string) => void
   onLoaded?: () => void
 }
 
-export default function StaircaseScene({ onProgress, onLoaded }: Props) {
+export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props) {
   const mountRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -101,9 +102,12 @@ export default function StaircaseScene({ onProgress, onLoaded }: Props) {
 
     // ── Materials ─────────────────────────────────────────────────────────
     const manager = new THREE.LoadingManager()
+    manager.onStart    = () => onStage?.('Loading textures')
     manager.onProgress = (_url, loaded, total) => onProgress?.(loaded / total)
     manager.onLoad     = () => {
+      onStage?.('Compiling shaders')
       renderer.compileAsync(scene, camera).then(() => {
+        onStage?.('Warming up renderer')
         // Render several frames behind the overlay to flush all lazy GPU uploads
         // before revealing the scene to the user.
         let remaining = 12

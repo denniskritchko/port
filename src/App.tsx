@@ -11,12 +11,14 @@ const PROJECTS = [
 ]
 
 export default function App() {
-  const [progress, setProgress]   = useState(0)
-  const [loaded,   setLoaded]     = useState(false)
-  const [gone,     setGone]       = useState(false)   // fully unmount after fade
+  const [progress, setProgress] = useState(0)
+  const [stage,    setStage]    = useState('Initializing')
+  const [loaded,   setLoaded]   = useState(false)
+  const [gone,     setGone]     = useState(false)
 
   const handleProgress = useCallback((p: number) => setProgress(p), [])
-  const handleLoaded   = useCallback(() => setLoaded(true), [])
+  const handleStage    = useCallback((s: string)  => setStage(s),    [])
+  const handleLoaded   = useCallback(() => setLoaded(true),          [])
 
   return (
     <>
@@ -54,8 +56,8 @@ export default function App() {
           {/* Loading bar */}
           <div style={{ marginTop: '3.5rem', width: '180px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ color: '#c8b8a8', fontSize: '0.6rem', letterSpacing: '0.22em', textTransform: 'uppercase' }}>
-                Loading
+              <span style={{ color: '#c8b8a8', fontSize: '0.6rem', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+                {stage}
               </span>
               <span style={{ color: '#c8b8a8', fontSize: '0.6rem', letterSpacing: '0.05em' }}>
                 {Math.round(progress * 100)}%
@@ -79,7 +81,7 @@ export default function App() {
 
       {/* Fixed Three.js canvas */}
       <Suspense fallback={null}>
-        <StaircaseScene onProgress={handleProgress} onLoaded={handleLoaded} />
+        <StaircaseScene onProgress={handleProgress} onStage={handleStage} onLoaded={handleLoaded} />
       </Suspense>
 
       {/* Scrollable overlay */}
