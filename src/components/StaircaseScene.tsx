@@ -22,7 +22,7 @@ const OUTER_R        = 7.0    // outer wall radius
 const MID_R          = (INNER_R + OUTER_R) / 2
 const STEP_WIDTH     = OUTER_R - INNER_R              // radial span of each tread
 const CAMERA_R       = 4.5    // orbit radius for the camera
-const EYE_H          = 1.7    // eye height above tread
+const EYE_H          = 3.2    // eye height above tread
 const TOTAL_DEPTH    = TOTAL_STEPS * STEP_RISE       // 19.5 total descent
 
 // painting at every 3rd step
