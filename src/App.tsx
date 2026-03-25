@@ -1,4 +1,5 @@
-import StaircaseScene from './components/StaircaseScene'
+import { lazy, Suspense } from 'react'
+const StaircaseScene = lazy(() => import('./components/StaircaseScene'))
 
 const PROJECTS = [
   { id: 1, title: 'Project One',   subtitle: 'Coming soon' },
@@ -12,7 +13,9 @@ export default function App() {
   return (
     <>
       {/* Fixed Three.js canvas */}
-      <StaircaseScene />
+      <Suspense fallback={null}>
+        <StaircaseScene />
+      </Suspense>
 
       {/* Scrollable overlay — must be taller than viewport to drive scroll */}
       <div className="relative z-10" style={{ height: '600vh' }}>

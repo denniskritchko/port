@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { EXRLoader } from 'three/addons/loaders/EXRLoader.js'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import maratUrl      from '../assets/Death-of-Marat-Jacques-Louis-David-Royal-Museums-1793.png'
 import pineDiff      from '../assets/stained_pine_4k.blend/textures/stained_pine_diff_4k.jpg'
 import pineNor       from '../assets/stained_pine_4k.blend/textures/stained_pine_nor_gl_4k.exr'
@@ -169,49 +170,65 @@ export default function StaircaseScene() {
     floor.receiveShadow = true
     scene.add(floor)
 
-    // ── Steps ─────────────────────────────────────────────────────────────
-    const treadGeo = new THREE.BoxGeometry(STEP_WIDTH, 0.1, 1.9)
-    const riserGeo = new THREE.BoxGeometry(STEP_WIDTH, STEP_RISE - 0.1, 0.08)
+    // ── Steps + posts — collected then merged into 3 draw calls ───────────
+    const treadTemplate = new THREE.BoxGeometry(STEP_WIDTH, 0.1, 1.9)
+    const riserTemplate = new THREE.BoxGeometry(STEP_WIDTH, STEP_RISE - 0.1, 0.08)
+    const postTemplate  = new THREE.CylinderGeometry(0.04, 0.04, 1.1, 8)
+
+    const treadGeos: THREE.BufferGeometry[] = []
+    const riserGeos: THREE.BufferGeometry[] = []
+    const postGeos:  THREE.BufferGeometry[] = []
+
+    const mat4 = new THREE.Matrix4()
+    const quat = new THREE.Quaternion()
+    const unit = new THREE.Vector3(1, 1, 1)
 
     for (let i = 0; i < TOTAL_STEPS; i++) {
       const angle = (i / STEPS_PER_REV) * Math.PI * 2
       const y     = -i * STEP_RISE
+      const rot   = quat.setFromEuler(new THREE.Euler(0, -angle, 0))
 
       // Tread
-      const tread = new THREE.Mesh(treadGeo, stepMat)
-      tread.position.set(Math.cos(angle) * MID_R, y, Math.sin(angle) * MID_R)
-      tread.rotation.y = -angle
-      tread.castShadow    = true
-      tread.receiveShadow = true
-      scene.add(tread)
+      const tg = treadTemplate.clone()
+      tg.applyMatrix4(mat4.compose(
+        new THREE.Vector3(Math.cos(angle) * MID_R, y, Math.sin(angle) * MID_R),
+        rot.clone(), unit,
+      ))
+      treadGeos.push(tg)
 
-      // Riser (front vertical face of each step)
-      const riser = new THREE.Mesh(riserGeo, stepMat)
-      riser.position.set(
-        Math.cos(angle) * MID_R + Math.cos(angle - Math.PI / 2) * 0.95,
-        y - (STEP_RISE - 0.1) / 2,
-        Math.sin(angle) * MID_R + Math.sin(angle - Math.PI / 2) * 0.95,
-      )
-      riser.rotation.y = -angle
-      riser.castShadow    = true
-      riser.receiveShadow = true
-      scene.add(riser)
+      // Riser
+      const rg = riserTemplate.clone()
+      rg.applyMatrix4(mat4.compose(
+        new THREE.Vector3(
+          Math.cos(angle) * MID_R + Math.cos(angle - Math.PI / 2) * 0.95,
+          y - (STEP_RISE - 0.1) / 2,
+          Math.sin(angle) * MID_R + Math.sin(angle - Math.PI / 2) * 0.95,
+        ),
+        rot.clone(), unit,
+      ))
+      riserGeos.push(rg)
+
+      // Post (cylinder — no rotation needed)
+      const pg = postTemplate.clone()
+      pg.applyMatrix4(mat4.compose(
+        new THREE.Vector3(Math.cos(angle) * (OUTER_R - 0.9), y + 0.55, Math.sin(angle) * (OUTER_R - 0.9)),
+        new THREE.Quaternion(), unit,
+      ))
+      postGeos.push(pg)
     }
 
-    // ── Railing posts ─────────────────────────────────────────────────────
-    const postGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.1, 8)
-    for (let i = 0; i < TOTAL_STEPS; i++) {
-      const angle = (i / STEPS_PER_REV) * Math.PI * 2
-      const y     = -i * STEP_RISE
-      const post  = new THREE.Mesh(postGeo, railMat)
-      post.position.set(
-        Math.cos(angle) * (OUTER_R - 0.9),
-        y + 0.55,
-        Math.sin(angle) * (OUTER_R - 0.9),
-      )
-      post.castShadow = true
-      scene.add(post)
-    }
+    // One mesh per group — 3 draw calls instead of 90
+    const mergedTreads = new THREE.Mesh(mergeGeometries(treadGeos), stepMat)
+    mergedTreads.castShadow = mergedTreads.receiveShadow = true
+    scene.add(mergedTreads)
+
+    const mergedRisers = new THREE.Mesh(mergeGeometries(riserGeos), stepMat)
+    mergedRisers.castShadow = mergedRisers.receiveShadow = true
+    scene.add(mergedRisers)
+
+    const mergedPosts = new THREE.Mesh(mergeGeometries(postGeos), railMat)
+    mergedPosts.castShadow = true
+    scene.add(mergedPosts)
 
     // ── Helical handrail ──────────────────────────────────────────────────
     const railPts: THREE.Vector3[] = []
