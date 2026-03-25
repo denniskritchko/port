@@ -1,6 +1,10 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { EXRLoader } from 'three/addons/loaders/EXRLoader.js'
 import maratUrl from '../assets/Death-of-Marat-Jacques-Louis-David-Royal-Museums-1793.png'
+import pineDiff  from '../assets/stained_pine_4k.blend/textures/stained_pine_diff_4k.jpg'
+import pineNor   from '../assets/stained_pine_4k.blend/textures/stained_pine_nor_gl_4k.exr'
+import pineRough from '../assets/stained_pine_4k.blend/textures/stained_pine_rough_4k.exr'
 
 // ─── Staircase constants ───────────────────────────────────────────────────
 const STEPS_PER_REV  = 10
@@ -91,8 +95,27 @@ export default function StaircaseScene() {
     }
 
     // ── Materials ─────────────────────────────────────────────────────────
-    // Wood treads — warm walnut
-    const stepMat = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.78, metalness: 0.0 })
+    // ── Wood texture (stained pine) ───────────────────────────────────────
+    const tl  = new THREE.TextureLoader()
+    const exr = new EXRLoader()
+    const maxAniso = renderer.capabilities.getMaxAnisotropy()
+
+    function woodTex(loader: THREE.TextureLoader | EXRLoader, url: string, sRGB = false) {
+      const t = loader.load(url)
+      t.wrapS = t.wrapT = THREE.RepeatWrapping
+      t.repeat.set(3, 1)           // 3 planks across the tread width, 1 along depth
+      t.anisotropy = maxAniso
+      if (sRGB) t.colorSpace = THREE.SRGBColorSpace
+      return t
+    }
+
+    // Wood treads — stained pine PBR
+    const stepMat = new THREE.MeshStandardMaterial({
+      map:          woodTex(tl,  pineDiff,  true),
+      normalMap:    woodTex(exr, pineNor),
+      roughnessMap: woodTex(exr, pineRough),
+      metalness:    0,
+    })
     // Concrete column — cool grey, very rough
     const colMat  = new THREE.MeshStandardMaterial({ color: 0x888886, roughness: 0.97, metalness: 0.0 })
     const wallMat = new THREE.MeshStandardMaterial({ color: 0xede8df, roughness: 0.92, side: THREE.BackSide })
