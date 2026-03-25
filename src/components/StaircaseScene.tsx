@@ -36,7 +36,12 @@ function easeInOut(t: number) {
   return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
 }
 
-export default function StaircaseScene() {
+interface Props {
+  onProgress?: (p: number) => void
+  onLoaded?: () => void
+}
+
+export default function StaircaseScene({ onProgress, onLoaded }: Props) {
   const mountRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -95,8 +100,12 @@ export default function StaircaseScene() {
     }
 
     // ── Materials ─────────────────────────────────────────────────────────
-    const tl  = new THREE.TextureLoader()
-    const exr = new EXRLoader()
+    const manager = new THREE.LoadingManager()
+    manager.onProgress = (_url, loaded, total) => onProgress?.(loaded / total)
+    manager.onLoad     = () => onLoaded?.()
+
+    const tl  = new THREE.TextureLoader(manager)
+    const exr = new EXRLoader(manager)
     const maxAniso = renderer.capabilities.getMaxAnisotropy()
 
     type AnyLoader = THREE.TextureLoader | EXRLoader
