@@ -1,10 +1,16 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { EXRLoader } from 'three/addons/loaders/EXRLoader.js'
-import maratUrl from '../assets/Death-of-Marat-Jacques-Louis-David-Royal-Museums-1793.png'
-import pineDiff  from '../assets/stained_pine_4k.blend/textures/stained_pine_diff_4k.jpg'
-import pineNor   from '../assets/stained_pine_4k.blend/textures/stained_pine_nor_gl_4k.exr'
-import pineRough from '../assets/stained_pine_4k.blend/textures/stained_pine_rough_4k.exr'
+import maratUrl      from '../assets/Death-of-Marat-Jacques-Louis-David-Royal-Museums-1793.png'
+import pineDiff      from '../assets/stained_pine_4k.blend/textures/stained_pine_diff_4k.jpg'
+import pineNor       from '../assets/stained_pine_4k.blend/textures/stained_pine_nor_gl_4k.exr'
+import pineRough     from '../assets/stained_pine_4k.blend/textures/stained_pine_rough_4k.exr'
+import concreteDiff  from '../assets/cracked_concrete_wall_4k.blend/textures/cracked_concrete_wall_diff_4k.jpg'
+import concreteNor   from '../assets/cracked_concrete_wall_4k.blend/textures/cracked_concrete_wall_nor_gl_4k.exr'
+import concreteRough from '../assets/cracked_concrete_wall_4k.blend/textures/cracked_concrete_wall_rough_4k.exr'
+import stoneDiff     from '../assets/white_sandstone_bricks_4k.blend/textures/white_sandstone_bricks_diff_4k.jpg'
+import stoneNor      from '../assets/white_sandstone_bricks_4k.blend/textures/white_sandstone_bricks_nor_gl_4k.exr'
+import stoneRough    from '../assets/white_sandstone_bricks_4k.blend/textures/white_sandstone_bricks_rough_4k.jpg'
 
 // ─── Staircase constants ───────────────────────────────────────────────────
 const STEPS_PER_REV  = 10
@@ -55,70 +61,79 @@ export default function StaircaseScene() {
     camera.lookAt(0, 2, 0)
 
     // ── Lighting ──────────────────────────────────────────────────────────
-    scene.add(new THREE.AmbientLight(0xffe8cc, 0.35))
 
-    // ── God light — dramatic spot above the staircase entrance ────────────
-    const godLight = new THREE.SpotLight(0xfff5d0, 18, 28, Math.PI / 7, 0.45, 1.8)
-    godLight.position.set(0, 4, 0)
-    godLight.target.position.set(0, -6, 0)
-    godLight.castShadow = true
-    godLight.shadow.mapSize.width  = 2048
-    godLight.shadow.mapSize.height = 2048
-    godLight.shadow.camera.near = 0.5
-    godLight.shadow.camera.far  = 30
-    godLight.shadow.bias = -0.001
-    scene.add(godLight)
-    scene.add(godLight.target)
+    // Hemisphere: warm sky above, warm tan from ground bounce — makes every
+    // surface feel like it lives in a real environment rather than flat ambient
+    scene.add(new THREE.HemisphereLight(0xfff8e8, 0xc8a46a, 0.55))
 
-    // Visible light shaft (additive transparent cone)
-    const shaftGeo = new THREE.CylinderGeometry(0.12, 4.2, 10, 40, 1, true)
-    const shaftMat = new THREE.MeshBasicMaterial({
-      color: 0xfff0b0,
-      transparent: true,
-      opacity: 0.055,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    })
-    const shaft = new THREE.Mesh(shaftGeo, shaftMat)
-    shaft.position.set(0, -1, 0)   // center of the 10-unit cone (top at y=4, base at y=-6)
-    scene.add(shaft)
+    // Sun — DirectionalLight has no visible origin; parallel rays from directly
+    // above, like light falling through a skylight. Covers the full scene.
+    const sun = new THREE.DirectionalLight(0xfff9ee, 2.8)
+    sun.position.set(2, 40, 4)          // high up — angle barely noticeable
+    sun.target.position.set(0, 0, 0)
+    sun.castShadow = true
+    sun.shadow.mapSize.set(2048, 2048)
+    sun.shadow.camera.left   = -12
+    sun.shadow.camera.right  =  12
+    sun.shadow.camera.top    =  12
+    sun.shadow.camera.bottom = -12
+    sun.shadow.camera.near   = 1
+    sun.shadow.camera.far    = 60
+    sun.shadow.bias = -0.0008
+    scene.add(sun)
+    scene.add(sun.target)
 
-    // Dim wall sconces for depth further down
+    // Warm sconces along the descent — now the primary mood light lower down
     for (let i = 1; i < 6; i++) {
       const t     = i / 5
       const angle = t * TOTAL_REVS * Math.PI * 2
       const y     = -t * TOTAL_DEPTH
-      const l     = new THREE.PointLight(0xffc86e, 0.45, 7)
+      const l     = new THREE.PointLight(0xffb84a, 0.9, 9)
       l.position.set(Math.cos(angle) * (OUTER_R - 0.8), y + 2.0, Math.sin(angle) * (OUTER_R - 0.8))
       scene.add(l)
     }
 
     // ── Materials ─────────────────────────────────────────────────────────
-    // ── Wood texture (stained pine) ───────────────────────────────────────
     const tl  = new THREE.TextureLoader()
     const exr = new EXRLoader()
     const maxAniso = renderer.capabilities.getMaxAnisotropy()
 
-    function woodTex(loader: THREE.TextureLoader | EXRLoader, url: string, sRGB = false) {
+    type AnyLoader = THREE.TextureLoader | EXRLoader
+    function tex(loader: AnyLoader, url: string, ru: number, rv: number, sRGB = false) {
       const t = loader.load(url)
       t.wrapS = t.wrapT = THREE.RepeatWrapping
-      t.repeat.set(3, 1)           // 3 planks across the tread width, 1 along depth
+      t.repeat.set(ru, rv)
       t.anisotropy = maxAniso
       if (sRGB) t.colorSpace = THREE.SRGBColorSpace
       return t
     }
 
-    // Wood treads — stained pine PBR
+    // Wood treads — stained pine
     const stepMat = new THREE.MeshStandardMaterial({
-      map:          woodTex(tl,  pineDiff,  true),
-      normalMap:    woodTex(exr, pineNor),
-      roughnessMap: woodTex(exr, pineRough),
-      metalness:    0,
+      map:          tex(tl,  pineDiff,      3, 1, true),
+      normalMap:    tex(exr, pineNor,       3, 1),
+      roughnessMap: tex(exr, pineRough,     3, 1),
+      metalness: 0,
     })
-    // Concrete column — cool grey, very rough
-    const colMat  = new THREE.MeshStandardMaterial({ color: 0x888886, roughness: 0.97, metalness: 0.0 })
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0xede8df, roughness: 0.92, side: THREE.BackSide })
+
+    // Cracked concrete — column (4 tiles around circumference, 8 down height)
+    const colMat = new THREE.MeshStandardMaterial({
+      map:          tex(tl,  concreteDiff,  4, 8, true),
+      normalMap:    tex(exr, concreteNor,   4, 8),
+      roughnessMap: tex(exr, concreteRough, 4, 8),
+      metalness: 0,
+    })
+
+    // White sandstone bricks — outer wall (12 tiles around, 5 down)
+    // normalScale Y negated for BackSide so bumps light correctly from inside
+    const wallMat = new THREE.MeshStandardMaterial({
+      map:          tex(tl,  stoneDiff,  12, 5, true),
+      normalMap:    tex(exr, stoneNor,   12, 5),
+      roughnessMap: tex(tl,  stoneRough, 12, 5),
+      normalScale:  new THREE.Vector2(1, -1),
+      metalness: 0,
+      side: THREE.BackSide,
+    })
     // Brushed dark metal railing
     const railMat = new THREE.MeshStandardMaterial({ color: 0x1e1e20, roughness: 0.12, metalness: 0.95 })
     const framMat = new THREE.MeshStandardMaterial({ color: 0xb8925a, roughness: 0.25, metalness: 0.6 })
