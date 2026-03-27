@@ -182,6 +182,10 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
     const railMat = new THREE.MeshStandardMaterial({ color: 0x1e1e20, roughness: 0.12, metalness: 0.95 })
     const texture = new THREE.TextureLoader().load(maratUrl)
     texture.colorSpace = THREE.SRGBColorSpace
+    // Flip horizontally so image reads correctly when viewed from inside the cylinder
+    texture.wrapS = THREE.RepeatWrapping
+    texture.repeat.x = -1
+    texture.offset.x = 1
     const canvMat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.8, side: THREE.DoubleSide })
     const floorMat = new THREE.MeshStandardMaterial({ color: 0xd8d0c4, roughness: 0.8 })
 
@@ -286,46 +290,72 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
     rail.castShadow = true
     scene.add(rail)
 
-    // ── Paintings (flat planes on the outer wall) ─────────────────────────
+    // ── Paintings (curved arcs on the outer wall) ─────────────────────────
     const PW      = 3.8    // painting width in world units
     const PH      = 2.5    // painting height in world units
     const FT      = 0.14   // frame bar thickness
-    const PAINT_R = OUTER_R + 0.55  // plane sits just inside the wall surface
+    const SEGS    = 32     // arc smoothness
+    const PAINT_R = OUTER_R + 0.57   // canvas sits just inside the wall
+    const FRAME_R = OUTER_R + 0.50   // frame sits proud of canvas (closer to centre)
 
-    const frameMatFlat = new THREE.MeshStandardMaterial({ color: 0xb8925a, roughness: 0.25, metalness: 0.6 })
+    const frameMatCurved = new THREE.MeshStandardMaterial({
+      color: 0xb8925a, roughness: 0.2, metalness: 0.65, side: THREE.BackSide,
+    })
 
     // Canvas meshes collected for click raycasting
     const paintMeshes: THREE.Mesh[] = []
 
-    PROJECT_STEPS.forEach((stepIdx) => {
+    PROJECT_STEPS.forEach((stepIdx, paintIdx) => {
       const angle = (stepIdx / STEPS_PER_REV) * Math.PI * 2
-      // Y: exact midpoint between the tread above (stepIdx) and the tread below (stepIdx+1)
-      const y     = -(stepIdx + 0.5) * STEP_RISE
+      // Y: midpoint of the vertical span between this painting's floor level and the
+      // next — i.e. halfway between two full levels of the staircase (not two steps).
+      const y = -(paintIdx + 0.5) * TOTAL_DEPTH / PROJECT_STEPS.length
 
-      // Group so all parts rotate together to face inward
-      const group = new THREE.Group()
-      group.position.set(PAINT_R * Math.cos(angle), y, PAINT_R * Math.sin(angle))
-      // Rotate so plane normal points toward staircase centre
-      group.rotation.y = -(angle + Math.PI / 2)
+      const paintArc = PW / PAINT_R
+      const sideArc  = FT / FRAME_R
+      const topArc   = (PW + FT * 2) / FRAME_R
 
       // Canvas
-      const canvas = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), canvMat)
-      group.add(canvas)
+      const canvasGeo = new THREE.CylinderGeometry(
+        PAINT_R, PAINT_R, PH, SEGS, 1, true,
+        angle - paintArc / 2, paintArc,
+      )
+      const canvas = new THREE.Mesh(canvasGeo, canvMat)
+      canvas.position.y = y
+      scene.add(canvas)
       paintMeshes.push(canvas)
 
-      // Frame bars — slightly in front of canvas (local +Z)
-      const fz = 0.015
-      const topBar   = new THREE.Mesh(new THREE.BoxGeometry(PW + 2 * FT, FT, 0.04), frameMatFlat)
-      topBar.position.set(0,  PH / 2 + FT / 2, fz)
-      const botBar   = new THREE.Mesh(new THREE.BoxGeometry(PW + 2 * FT, FT, 0.04), frameMatFlat)
-      botBar.position.set(0, -(PH / 2 + FT / 2), fz)
-      const leftBar  = new THREE.Mesh(new THREE.BoxGeometry(FT, PH + 2 * FT, 0.04), frameMatFlat)
-      leftBar.position.set(-(PW / 2 + FT / 2), 0, fz)
-      const rightBar = new THREE.Mesh(new THREE.BoxGeometry(FT, PH + 2 * FT, 0.04), frameMatFlat)
-      rightBar.position.set( PW / 2 + FT / 2,  0, fz)
+      // Frame — top bar
+      const topGeo = new THREE.CylinderGeometry(
+        FRAME_R, FRAME_R, FT, SEGS, 1, true,
+        angle - topArc / 2, topArc,
+      )
+      const topBar = new THREE.Mesh(topGeo, frameMatCurved)
+      topBar.position.y = y + PH / 2 + FT / 2
+      scene.add(topBar)
 
-      group.add(topBar, botBar, leftBar, rightBar)
-      scene.add(group)
+      // Frame — bottom bar
+      const botBar = topBar.clone()
+      botBar.position.y = y - PH / 2 - FT / 2
+      scene.add(botBar)
+
+      // Frame — left bar
+      const leftGeo = new THREE.CylinderGeometry(
+        FRAME_R, FRAME_R, PH + FT * 2, SEGS, 1, true,
+        angle - paintArc / 2 - sideArc, sideArc,
+      )
+      const leftBar = new THREE.Mesh(leftGeo, frameMatCurved)
+      leftBar.position.y = y
+      scene.add(leftBar)
+
+      // Frame — right bar
+      const rightGeo = new THREE.CylinderGeometry(
+        FRAME_R, FRAME_R, PH + FT * 2, SEGS, 1, true,
+        angle + paintArc / 2, sideArc,
+      )
+      const rightBar = new THREE.Mesh(rightGeo, frameMatCurved)
+      rightBar.position.y = y
+      scene.add(rightBar)
     })
 
     // ── Scroll → camera ───────────────────────────────────────────────────
