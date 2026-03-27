@@ -116,7 +116,7 @@ export default function App() {
       </Suspense>
 
       {/* Scrollable overlay — pointer-events:none lets clicks reach the Three.js canvas */}
-      <div className="relative z-10" style={{ height: '600vh', pointerEvents: 'none' }}>
+      <div className="relative z-10" style={{ height: '700vh', pointerEvents: 'none' }}>
 
         {/* ── Hero ── */}
         <section
@@ -165,6 +165,9 @@ export default function App() {
             style={{ scrollSnapAlign: 'start' }}
           />
         ))}
+
+        {/* ── End section — camera continues past the last painting ── */}
+        <section className="h-screen" style={{ scrollSnapAlign: 'start' }} />
 
       </div>
 

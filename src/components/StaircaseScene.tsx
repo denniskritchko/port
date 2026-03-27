@@ -20,8 +20,8 @@ import mutectUrl      from '../assets/mutect.jpg'
 
 // ─── Staircase constants ───────────────────────────────────────────────────
 const STEPS_PER_REV  = 10
-const TOTAL_STEPS    = 36                              // 30 × 1.2 — 20% longer entrance
-const TOTAL_REVS     = TOTAL_STEPS / STEPS_PER_REV    // 3.6 — derived so camera spiral matches steps
+const TOTAL_STEPS    = 66                              // extended: ~30 extra intro steps above paintings
+const TOTAL_REVS     = TOTAL_STEPS / STEPS_PER_REV    // 6.6 — derived so camera spiral matches steps
 const STEP_RISE      = 0.65
 const INNER_R        = 1.5
 const OUTER_R        = 7.0
@@ -29,20 +29,22 @@ const MID_R          = (INNER_R + OUTER_R) / 2
 const STEP_WIDTH     = OUTER_R - INNER_R
 const CAMERA_R       = 4.5
 const EYE_H          = 3.2
-const TOTAL_DEPTH    = TOTAL_STEPS * STEP_RISE        // 23.4
+const TOTAL_DEPTH    = TOTAL_STEPS * STEP_RISE        // 42.9
 
-// Camera stops: shifted down 6 steps vs original so intro has more stairwell above
-const CAMERA_ANCHOR_STEPS = [16, 20, 24, 28, 31]
-const PROJECT_STEPS       = [20, 24, 28, 32, 35]
+// Landing position for the about-me section (no paintings yet — stairwell stretches above)
+const ABOUT_ANCHOR_STEP   = 16
+// Project camera stops and painting positions (30 steps deeper than before)
+const CAMERA_ANCHOR_STEPS = [46, 50, 54, 58, 61]
+const PROJECT_STEPS       = [50, 54, 58, 62, 65]
 
-// Swoop lands exactly at project 1 camera position
-const INITIAL_P     = CAMERA_ANCHOR_STEPS[0] / TOTAL_STEPS
+// Swoop lands at the about-me anchor; scroll-0 is the about section
+const INITIAL_P     = ABOUT_ANCHOR_STEP / TOTAL_STEPS
 const INITIAL_ANGLE = INITIAL_P * TOTAL_REVS * Math.PI * 2
 const INITIAL_DEPTH = INITIAL_P * TOTAL_DEPTH
 
-// 6 anchors → 5 scroll sections. Section N moves camera from project N to project N+1.
-// No wasted "intro" section — scroll 0 = project 1, scroll 1 = project 2, etc.
+// 7 anchors → 6 scroll sections: about-me → proj1 → proj2 → proj3 → proj4 → proj5 → end
 const ANCHORS = [
+  INITIAL_P,
   ...CAMERA_ANCHOR_STEPS.map(s => s / TOTAL_STEPS),
   PROJECT_STEPS[PROJECT_STEPS.length - 1] / TOTAL_STEPS,
 ]
@@ -306,19 +308,19 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       onStage?.('Building scene')
 
       // Composite fitpicify1 + fitpicify2 side by side.
-      // Draw img2 left / img1 right so that after the horizontal flip applied
-      // to all painting textures, fitpicify1 appears on the LEFT and fitpicify2
-      // on the RIGHT as viewed from inside the cylinder.
+      // Draw img1 left / img2 right on the canvas; after the horizontal flip
+      // (repeat.x=-1) applied to all painting textures, this renders as
+      // fitpicify1 on the LEFT and fitpicify2 on the RIGHT from inside the cylinder.
       const img1 = fit1Tex.image as HTMLImageElement
       const img2 = fit2Tex.image as HTMLImageElement
-      const compW = img2.width + img1.width
+      const compW = img1.width + img2.width
       const compH = Math.max(img1.height, img2.height)
       const compCanvas = document.createElement('canvas')
       compCanvas.width  = compW
       compCanvas.height = compH
       const ctx = compCanvas.getContext('2d')!
-      ctx.drawImage(img2, 0, 0)
-      ctx.drawImage(img1, img2.width, 0)
+      ctx.drawImage(img1, 0, 0)
+      ctx.drawImage(img2, img1.width, 0)
       const fitTex = new THREE.CanvasTexture(compCanvas)
       fitTex.colorSpace = THREE.SRGBColorSpace
       applyFlip(fitTex)
