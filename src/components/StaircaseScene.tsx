@@ -26,16 +26,16 @@ const CAMERA_R       = 4.5    // orbit radius for the camera
 const EYE_H          = 3.2    // eye height above tread
 const TOTAL_DEPTH    = TOTAL_STEPS * STEP_RISE       // 19.5 total descent
 
-// painting at every 3rd step
-const PAINTING_STEPS = Array.from({ length: 10 }, (_, i) => 2 + i * 3)
-
-// Phase 0→INTRO_END: pull from bird's-eye down to stairs entry
-const INTRO_END = 0.12
+// One painting per project, evenly spaced down the stairwell
+const PROJECT_STEPS = [10, 14, 18, 22, 26]
 
 // Scroll ratio at which the swoop ends — puts camera clearly inside the stairwell
 const INITIAL_P     = 0.08 + 6 / TOTAL_STEPS
 const INITIAL_ANGLE = INITIAL_P * TOTAL_REVS * Math.PI * 2
 const INITIAL_DEPTH = INITIAL_P * TOTAL_DEPTH
+
+// Camera anchor positions: hero entry + one per project
+const ANCHORS = [INITIAL_P, ...PROJECT_STEPS.map(s => s / TOTAL_STEPS)]
 
 function easeInOut(t: number) {
   return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
@@ -288,8 +288,8 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
     scene.add(rail)
 
     // ── Paintings (curved arcs following the wall) ────────────────────────
-    const PW      = 2.1    // painting width in world units
-    const PH      = 1.5    // painting height in world units
+    const PW      = 3.8    // painting width in world units
+    const PH      = 2.5    // painting height in world units
     const FT      = 0.14   // frame bar width in world units
     const SEGS    = 32     // arc smoothness
     const PAINT_R = OUTER_R + 0.57   // canvas sits just inside the wall
@@ -299,9 +299,10 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
       color: 0xb8925a, roughness: 0.2, metalness: 0.65, side: THREE.BackSide,
     })
 
-    PAINTING_STEPS.forEach((stepIdx) => {
+    PROJECT_STEPS.forEach((stepIdx) => {
       const angle    = (stepIdx / STEPS_PER_REV) * Math.PI * 2
-      const y        = -stepIdx * STEP_RISE + 0.6
+      // Center painting at eye level for this step
+      const y        = -stepIdx * STEP_RISE + EYE_H - 0.3
 
       const paintArc = PW / PAINT_R                   // arc angle spanning the canvas
       const sideArc  = FT / FRAME_R                   // arc angle for left/right bars
@@ -377,6 +378,11 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
     // Mutable state — lives in the closure, not React state
     const swoop = { active: false, t0: 0 }
 
+    // Smoothly lerped camera — decouples snap-scroll positions from camera jerk
+    const camLerped = { pos: swoopToPos.clone(), look: swoopToLook.clone() }
+    const targetPos  = new THREE.Vector3()
+    const targetLook = new THREE.Vector3()
+
     // ── Animation loop ────────────────────────────────────────────────────
     let frameId: number
     const tmpLook = new THREE.Vector3()
@@ -400,29 +406,32 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
           document.body.style.overflow = ''
           window.scrollTo({ top: 0, behavior: 'instant' })
           scroll.y = 0
+          // Sync lerped camera so scroll section starts with no jump
+          camLerped.pos.copy(swoopToPos)
+          camLerped.look.copy(swoopToLook)
         }
 
       } else {
-        // ── Scroll-driven camera ──────────────────────────────────────────
-        // Remap so scroll=0 lands at INITIAL_DEPTH (walls fill screen) and
-        // scroll=max reaches the bottom of the stairwell.
-        const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
-        const overall   = Math.min(scroll.y / maxScroll, 1)
-        const angle = INITIAL_ANGLE + overall * (TOTAL_REVS * Math.PI * 2 - INITIAL_ANGLE)
-        const depth = INITIAL_DEPTH + overall * (TOTAL_DEPTH - INITIAL_DEPTH)
+        // ── Scroll-driven camera — section-based, one anchor per project ──
+        const maxScroll  = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
+        const numSections = ANCHORS.length - 1
+        const rawSection  = Math.min(scroll.y / maxScroll, 1) * numSections
+        const sIdx        = Math.min(Math.floor(rawSection), numSections - 1)
+        const t           = easeInOut(rawSection - sIdx)
+        const p           = ANCHORS[sIdx] + (ANCHORS[sIdx + 1] - ANCHORS[sIdx]) * t
 
-        camera.position.set(
-          Math.cos(angle) * CAMERA_R,
-          -depth + EYE_H,
-          Math.sin(angle) * CAMERA_R,
-        )
-        camera.lookAt(
-          Math.cos(angle + 0.45) * 2.2,
-          -depth + EYE_H - 0.55,
-          Math.sin(angle + 0.45) * 2.2,
-        )
+        const angle = p * TOTAL_REVS * Math.PI * 2
+        const depth = p * TOTAL_DEPTH
 
-        // Reset FOV in case it drifted
+        targetPos.set(Math.cos(angle) * CAMERA_R, -depth + EYE_H, Math.sin(angle) * CAMERA_R)
+        targetLook.set(Math.cos(angle + 0.45) * 2.2, -depth + EYE_H - 0.55, Math.sin(angle + 0.45) * 2.2)
+
+        // Lerp for smooth camera motion on scroll-snap jumps
+        camLerped.pos.lerp(targetPos, 0.08)
+        camLerped.look.lerp(targetLook, 0.08)
+        camera.position.copy(camLerped.pos)
+        camera.lookAt(camLerped.look)
+
         if (camera.fov !== NORMAL_FOV) {
           camera.fov = NORMAL_FOV
           camera.updateProjectionMatrix()
