@@ -89,47 +89,59 @@ export default function App() {
 
         {/* ── Hero ── */}
         <section className="h-screen flex flex-col items-center justify-center pointer-events-none select-none">
-          <p className="text-xs tracking-[0.3em] uppercase mb-8" style={{ color: '#b0a89e' }}>
-            Portfolio
-          </p>
-          <h1
-            className="text-6xl md:text-8xl font-light leading-none tracking-tight"
-            style={{ color: '#2a2520', fontFamily: 'Georgia, serif' }}
+          <div
+            className="flex flex-col items-center"
+            style={{
+              background: 'rgba(247,245,240,0.72)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              borderRadius: '1.5rem',
+              padding: '2.5rem 3rem 2rem',
+              border: '1px solid rgba(200,184,154,0.25)',
+            }}
           >
-            Dennis<br />
-            <span style={{ color: '#8a7f74' }}>Kritchko</span>
-          </h1>
-          <p className="mt-6 text-base font-light tracking-wide" style={{ color: '#a09690' }}>
-            Designer &amp; Developer
-          </p>
+            <p className="text-xs tracking-[0.3em] uppercase mb-8" style={{ color: '#b0a89e' }}>
+              Portfolio
+            </p>
+            <h1
+              className="text-6xl md:text-8xl font-light leading-none tracking-tight"
+              style={{ color: '#2a2520', fontFamily: 'Georgia, serif' }}
+            >
+              Dennis<br />
+              <span style={{ color: '#8a7f74' }}>Kritchko</span>
+            </h1>
+            <p className="mt-6 text-base font-light tracking-wide" style={{ color: '#a09690' }}>
+              Designer &amp; Developer
+            </p>
 
-          {/* About */}
-          <p
-            className="mt-8 text-sm font-light leading-relaxed text-center"
-            style={{ color: '#a09690', maxWidth: 360 }}
-          >
-            Incoming SWE Intern at Microsoft · Windows &amp; Devices.
-            Exploring AI developer tooling and the intersection of fashion and technology.
-          </p>
+            {/* About */}
+            <p
+              className="mt-8 text-sm font-light leading-relaxed text-center"
+              style={{ color: '#a09690', maxWidth: 360 }}
+            >
+              Incoming SWE Intern at Microsoft · Windows &amp; Devices.
+              Exploring AI developer tooling and the intersection of fashion and technology.
+            </p>
 
-          {/* Social links — pointer-events-auto so they're clickable */}
-          <div className="mt-6 flex items-center gap-7 pointer-events-auto">
-            {[
-              { label: 'LinkedIn',  href: 'https://linkedin.com/in/dennis-kritchko' },
-              { label: 'GitHub',    href: 'https://github.com/denniskritchko'       },
-              { label: 'Instagram', href: 'https://instagram.com/kritchko'           },
-            ].map(({ label, href }) => (
-              <a
-                key={label}
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs tracking-[0.18em] uppercase transition-opacity duration-300 hover:opacity-40"
-                style={{ color: '#b0a89e' }}
-              >
-                {label}
-              </a>
-            ))}
+            {/* Social links — pointer-events-auto so they're clickable */}
+            <div className="mt-6 flex items-center gap-7 pointer-events-auto">
+              {[
+                { label: 'LinkedIn',  href: 'https://linkedin.com/in/dennis-kritchko' },
+                { label: 'GitHub',    href: 'https://github.com/denniskritchko'       },
+                { label: 'Instagram', href: 'https://instagram.com/kritchko'           },
+              ].map(({ label, href }) => (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs tracking-[0.18em] uppercase transition-opacity duration-300 hover:opacity-40"
+                  style={{ color: '#b0a89e' }}
+                >
+                  {label}
+                </a>
+              ))}
+            </div>
           </div>
 
           <div className="mt-10 flex flex-col items-center gap-2" style={{ color: '#c0b8b0' }}>
