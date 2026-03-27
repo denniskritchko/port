@@ -32,6 +32,11 @@ const PAINTING_STEPS = Array.from({ length: 10 }, (_, i) => 2 + i * 3)
 // Phase 0→INTRO_END: pull from bird's-eye down to stairs entry
 const INTRO_END = 0.12
 
+// Scroll ratio at which the swoop ends — puts camera clearly inside the stairwell
+const INITIAL_P     = 0.08
+const INITIAL_ANGLE = INITIAL_P * TOTAL_REVS * Math.PI * 2
+const INITIAL_DEPTH = INITIAL_P * TOTAL_DEPTH
+
 function easeInOut(t: number) {
   return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
 }
@@ -125,6 +130,9 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
         requestAnimationFrame(warmup)
       })
     }
+
+    // Prevent scrolling during the swoop intro; restored when swoop ends
+    document.body.style.overflow = 'hidden'
 
     const tl  = new THREE.TextureLoader(manager)
     const exr = new EXRLoader(manager)
@@ -363,8 +371,8 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
     const swoopFromPos  = new THREE.Vector3(3, 10, 0)
     // Look toward the outer wall, mostly horizontal — fills frame with brick
     const swoopFromLook = new THREE.Vector3(OUTER_R - 0.4, 8, 0)
-    const swoopToPos    = new THREE.Vector3(CAMERA_R, EYE_H, 0)
-    const swoopToLook   = new THREE.Vector3(Math.cos(0.45) * 2.2, EYE_H - 0.55, Math.sin(0.45) * 2.2)
+    const swoopToPos    = new THREE.Vector3(Math.cos(INITIAL_ANGLE) * CAMERA_R, -INITIAL_DEPTH + EYE_H, Math.sin(INITIAL_ANGLE) * CAMERA_R)
+    const swoopToLook   = new THREE.Vector3(Math.cos(INITIAL_ANGLE + 0.45) * 2.2, -INITIAL_DEPTH + EYE_H - 0.55, Math.sin(INITIAL_ANGLE + 0.45) * 2.2)
 
     // Mutable state — lives in the closure, not React state
     const swoop = { active: false, t0: 0 }
@@ -387,7 +395,14 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
         camera.fov = THREE.MathUtils.lerp(SWOOP_FOV, NORMAL_FOV, t)
         camera.updateProjectionMatrix()
 
-        if (raw >= 1) swoop.active = false
+        if (raw >= 1) {
+          swoop.active = false
+          document.body.style.overflow = ''
+          const maxScroll = document.documentElement.scrollHeight - window.innerHeight
+          const target    = INITIAL_P * maxScroll
+          window.scrollTo({ top: target, behavior: 'instant' })
+          scroll.y = target
+        }
 
       } else {
         // ── Scroll-driven camera ──────────────────────────────────────────
@@ -423,6 +438,7 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
       cancelAnimationFrame(frameId)
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', onResize)
+      document.body.style.overflow = ''
       renderer.dispose()
       mount.removeChild(renderer.domElement)
     }
