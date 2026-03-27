@@ -49,18 +49,16 @@ const ANCHORS = [
   PROJECT_STEPS[PROJECT_STEPS.length - 1] / TOTAL_STEPS,
 ]
 
-function easeInOut(t: number) {
-  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
-}
 
 interface Props {
-  onProgress?:     (p: number) => void
-  onStage?:        (stage: string) => void
-  onLoaded?:       () => void
-  onProjectClick?: (index: number) => void
+  onProgress?:      (p: number) => void
+  onStage?:         (stage: string) => void
+  onLoaded?:        () => void
+  onProjectClick?:  (index: number) => void
+  onSectionChange?: (section: number) => void
 }
 
-export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjectClick }: Props) {
+export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjectClick, onSectionChange }: Props) {
   const mountRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -417,10 +415,29 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       })
     }
 
-    // ── Scroll → camera ───────────────────────────────────────────────────
-    const scroll = { y: 0 }
-    const onScroll = () => { scroll.y = window.scrollY }
-    window.addEventListener('scroll', onScroll, { passive: true })
+    // ── Discrete section navigation ───────────────────────────────────────
+    // One wheel tick or arrow key advances exactly one anchor — guarantees
+    // consistent camera travel distance regardless of anchor spacing.
+    const nav = { section: 0, lastChange: -Infinity }
+    const COOLDOWN_MS = 700
+
+    const advanceSection = (dir: 1 | -1) => {
+      if (performance.now() - nav.lastChange < COOLDOWN_MS) return
+      const next = Math.max(0, Math.min(ANCHORS.length - 1, nav.section + dir))
+      if (next === nav.section) return
+      nav.section    = next
+      nav.lastChange = performance.now()
+      onSectionChange?.(next)
+    }
+
+    const onWheel   = (e: WheelEvent)    => { e.preventDefault(); advanceSection(e.deltaY > 0 ? 1 : -1) }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); advanceSection(1)  }
+      if (e.key === 'ArrowUp')                    { e.preventDefault(); advanceSection(-1) }
+    }
+
+    window.addEventListener('wheel',   onWheel,   { passive: false })
+    window.addEventListener('keydown', onKeyDown)
 
     // ── Painting click / hover ────────────────────────────────────────────
     const raycaster = new THREE.Raycaster()
@@ -486,33 +503,21 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
         if (raw >= 1) {
           swoop.active = false
           document.body.style.overflow = ''
-          window.scrollTo({ top: 0, behavior: 'instant' })
-          scroll.y = 0
           camLerped.pos.copy(swoopToPos)
           camLerped.look.copy(swoopToLook)
         }
 
       } else {
-        // Scroll-driven camera — one anchor per project
-        const maxScroll   = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
-        const numSections = ANCHORS.length - 1
-        const rawSection  = Math.min(scroll.y / maxScroll, 1) * numSections
-        const sIdx        = Math.min(Math.floor(rawSection), numSections - 1)
-        const t           = easeInOut(rawSection - sIdx)
-        const p           = ANCHORS[sIdx] + (ANCHORS[sIdx + 1] - ANCHORS[sIdx]) * t
-
+        // Section-driven camera — lerps to ANCHORS[nav.section]
+        const p     = ANCHORS[nav.section]
         const angle = p * TOTAL_REVS * Math.PI * 2
         const depth = p * TOTAL_DEPTH
 
         targetPos.set(Math.cos(angle) * CAMERA_R, -depth + EYE_H, Math.sin(angle) * CAMERA_R)
         targetLook.set(Math.cos(angle + 0.45) * 2.2, -depth + EYE_H - 0.55, Math.sin(angle + 0.45) * 2.2)
 
-        // Snap instantly when far away (fast scroll), smooth when close.
-        // Prevents camera swimming through walls on multi-section jumps.
-        const dist = camLerped.pos.distanceTo(targetPos)
-        const lf   = dist > 4.0 ? 1.0 : 0.12
-        camLerped.pos.lerp(targetPos, lf)
-        camLerped.look.lerp(targetLook, lf)
+        camLerped.pos.lerp(targetPos, 0.08)
+        camLerped.look.lerp(targetLook, 0.08)
         camera.position.copy(camLerped.pos)
         camera.lookAt(camLerped.look)
 
@@ -528,8 +533,9 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
 
     return () => {
       cancelAnimationFrame(frameId)
-      window.removeEventListener('scroll', onScroll)
-      window.removeEventListener('resize', onResize)
+      window.removeEventListener('wheel',   onWheel)
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('resize',  onResize)
       renderer.domElement.removeEventListener('click',     onCanvasClick)
       renderer.domElement.removeEventListener('mousemove', onCanvasMove)
       document.body.style.overflow = ''
