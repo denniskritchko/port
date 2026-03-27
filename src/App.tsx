@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useCallback } from 'react'
+import { lazy, Suspense, useState, useCallback, useEffect } from 'react'
 
 const StaircaseScene = lazy(() => import('./components/StaircaseScene'))
 
@@ -60,11 +60,20 @@ export default function App() {
   const [loaded,         setLoaded]         = useState(false)
   const [gone,           setGone]           = useState(false)
   const [activeProject,  setActiveProject]  = useState<number | null>(null)
+  const [currentSection, setCurrentSection] = useState(0)
 
-  const handleProgress     = useCallback((p: number) => setProgress(p), [])
-  const handleStage        = useCallback((s: string)  => setStage(s),   [])
-  const handleLoaded       = useCallback(() => setLoaded(true),          [])
-  const handleProjectClick = useCallback((i: number)  => setActiveProject(i), [])
+  const handleProgress       = useCallback((p: number) => setProgress(p), [])
+  const handleStage          = useCallback((s: string)  => setStage(s),   [])
+  const handleLoaded         = useCallback(() => setLoaded(true),          [])
+  const handleProjectClick   = useCallback((i: number)  => setActiveProject(i), [])
+  const handleSectionChange  = useCallback((s: number)  => setCurrentSection(s), [])
+
+  // Close project modal on Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setActiveProject(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const proj = activeProject !== null ? PROJECTS[activeProject] : null
 
@@ -112,64 +121,35 @@ export default function App() {
           onStage={handleStage}
           onLoaded={handleLoaded}
           onProjectClick={handleProjectClick}
+          onSectionChange={handleSectionChange}
         />
       </Suspense>
 
-      {/* Scrollable overlay — pointer-events:none lets clicks reach the Three.js canvas */}
-      <div className="relative z-10" style={{ height: '700vh', pointerEvents: 'none' }}>
-
-        {/* ── Hero ── */}
-        <section
-          className="h-screen flex flex-col items-center justify-center select-none"
-          style={{ scrollSnapAlign: 'start' }}
+      {/* Intro nameplate — only visible at section 0 */}
+      {currentSection === 0 && (
+        <div
+          className="fixed inset-0 z-10 flex flex-col items-center justify-center select-none"
+          style={{ pointerEvents: 'none' }}
         >
-          <div className="flex flex-col items-center" style={{ ...glassStyle, padding: '2.5rem 3rem 2rem', pointerEvents: 'auto' }}>
-            <p className="text-xs tracking-[0.3em] uppercase mb-8" style={{ color: '#2a2520' }}>Portfolio</p>
-            <h1 className="text-6xl md:text-8xl font-light leading-none tracking-tight" style={{ color: '#2a2520', fontFamily: 'Georgia, serif' }}>
-              Dennis<br /><span style={{ color: '#8a7f74' }}>Kritchko</span>
-            </h1>
-            <p className="mt-6 text-base font-light tracking-wide" style={{ color: '#2a2520' }}>
-              Designer &amp; Developer
-            </p>
-            <p className="mt-8 text-sm font-light leading-relaxed text-center" style={{ color: '#2a2520', maxWidth: 360 }}>
-              Incoming SWE Intern at Microsoft · Windows &amp; Devices.
-              Exploring AI developer tooling and the intersection of fashion and technology.
-            </p>
-            <div className="mt-6 flex items-center gap-7">
-              {[
-                { label: 'LinkedIn',  href: 'https://linkedin.com/in/dennis-kritchko' },
-                { label: 'GitHub',    href: 'https://github.com/denniskritchko'       },
-                { label: 'Instagram', href: 'https://instagram.com/kritchko'           },
-              ].map(({ label, href }) => (
-                <a key={label} href={href} target="_blank" rel="noopener noreferrer"
-                  className="text-xs tracking-[0.18em] uppercase transition-opacity duration-300 hover:opacity-40"
-                  style={{ color: '#2a2520' }}>
-                  {label}
-                </a>
-              ))}
-            </div>
-          </div>
+          <h1
+            className="font-light leading-none tracking-tight text-center"
+            style={{
+              color: '#2a2520',
+              fontFamily: 'Georgia, serif',
+              fontSize: 'clamp(3rem, 9vw, 6rem)',
+              letterSpacing: '-0.02em',
+            }}
+          >
+            Dennis<br /><span style={{ color: '#8a7f74' }}>Kritchko</span>
+          </h1>
           <div className="mt-10 flex flex-col items-center gap-2" style={{ color: '#c0b8b0' }}>
             <span className="text-xs tracking-[0.2em] uppercase">Scroll</span>
             <svg width="1" height="40" viewBox="0 0 1 40">
               <line x1="0.5" y1="0" x2="0.5" y2="40" stroke="#c8b89a" strokeWidth="1" />
             </svg>
           </div>
-        </section>
-
-        {/* ── Project snap sections — empty snap targets, paintings are the content ── */}
-        {PROJECTS.map((p) => (
-          <section
-            key={p.id}
-            className="h-screen"
-            style={{ scrollSnapAlign: 'start' }}
-          />
-        ))}
-
-        {/* ── End section — camera continues past the last painting ── */}
-        <section className="h-screen" style={{ scrollSnapAlign: 'start' }} />
-
-      </div>
+        </div>
+      )}
 
       {/* ── Project info overlay — shown on painting click ── */}
       {proj && (
