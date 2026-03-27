@@ -42,6 +42,7 @@ const PROJECTS = [
     desc: 'Short tandem repeat detector built on distributed data pipelines and machine learning.',
     tech: ['Python', 'Apache Spark', 'scikit-learn'],
     href: 'https://github.com/denniskritchko/Mutect',
+    videoHref: 'https://www.youtube.com/watch?v=J_UsRXKDjb4',
   },
 ]
 
@@ -225,16 +226,29 @@ export default function App() {
               </div>
             </div>
 
-            {/* GitHub link */}
-            <a
-              href={proj.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block text-xs tracking-[0.18em] uppercase transition-opacity duration-300 hover:opacity-50"
-              style={{ color: '#8a7f74' }}
-            >
-              View on GitHub →
-            </a>
+            {/* Links */}
+            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+              <a
+                href={proj.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block text-xs tracking-[0.18em] uppercase transition-opacity duration-300 hover:opacity-50"
+                style={{ color: '#8a7f74' }}
+              >
+                View on GitHub →
+              </a>
+              {'videoHref' in proj && (
+                <a
+                  href={(proj as typeof proj & { videoHref: string }).videoHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-xs tracking-[0.18em] uppercase transition-opacity duration-300 hover:opacity-50"
+                  style={{ color: '#8a7f74' }}
+                >
+                  Watch Demo →
+                </a>
+              )}
+            </div>
           </div>
         </div>
       )}

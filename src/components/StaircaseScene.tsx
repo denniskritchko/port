@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { EXRLoader } from 'three/addons/loaders/EXRLoader.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import maratUrl      from '../assets/Death-of-Marat-Jacques-Louis-David-Royal-Museums-1793.png'
 import pineDiff      from '../assets/stained_pine_4k.blend/textures/stained_pine_diff_4k.jpg'
 import pineNor       from '../assets/stained_pine_4k.blend/textures/stained_pine_nor_gl_4k.exr'
 import pineRough     from '../assets/stained_pine_4k.blend/textures/stained_pine_rough_4k.exr'
@@ -12,33 +11,41 @@ import concreteRough from '../assets/cracked_concrete_wall_4k.blend/textures/cra
 import stoneDiff     from '../assets/white_sandstone_bricks_4k.blend/textures/white_sandstone_bricks_diff_4k.jpg'
 import stoneNor      from '../assets/white_sandstone_bricks_4k.blend/textures/white_sandstone_bricks_nor_gl_4k.exr'
 import stoneRough    from '../assets/white_sandstone_bricks_4k.blend/textures/white_sandstone_bricks_rough_4k.jpg'
+import fitpicify1Url from '../assets/fitpicify1.jpg'
+import fitpicify2Url from '../assets/fitpicify2.jpg'
+import fastFashionUrl from '../assets/Fastfashionanalysis.png'
+import noscrollUrl    from '../assets/noscroll.png'
+import tictactoeUrl   from '../assets/3dtictactoe.jpeg'
+import mutectUrl      from '../assets/mutect.jpg'
 
 // ─── Staircase constants ───────────────────────────────────────────────────
 const STEPS_PER_REV  = 10
-const TOTAL_REVS     = 3
-const TOTAL_STEPS    = STEPS_PER_REV * TOTAL_REVS   // 30
+const TOTAL_STEPS    = 36                              // 30 × 1.2 — 20% longer entrance
+const TOTAL_REVS     = TOTAL_STEPS / STEPS_PER_REV    // 3.6 — derived so camera spiral matches steps
 const STEP_RISE      = 0.65
-const INNER_R        = 1.5    // central column radius
-const OUTER_R        = 7.0    // outer wall radius
+const INNER_R        = 1.5
+const OUTER_R        = 7.0
 const MID_R          = (INNER_R + OUTER_R) / 2
-const STEP_WIDTH     = OUTER_R - INNER_R              // radial span of each tread
-const CAMERA_R       = 4.5    // orbit radius for the camera
-const EYE_H          = 3.2    // eye height above tread
-const TOTAL_DEPTH    = TOTAL_STEPS * STEP_RISE       // 19.5 total descent
+const STEP_WIDTH     = OUTER_R - INNER_R
+const CAMERA_R       = 4.5
+const EYE_H          = 3.2
+const TOTAL_DEPTH    = TOTAL_STEPS * STEP_RISE        // 23.4
 
-// Camera stops (one per project section). At each stop the camera's forward ray
-// hits the wall ~4 steps ahead (camera lookAt offset ≈ 2.55 rad ≈ 4.05 steps).
-const CAMERA_ANCHOR_STEPS = [10, 14, 18, 22, 25]
-// Painting positions: 4 steps ahead of their viewing camera so they're centered.
-const PROJECT_STEPS       = [14, 18, 22, 26, 29]
+// Camera stops: shifted down 6 steps vs original so intro has more stairwell above
+const CAMERA_ANCHOR_STEPS = [16, 20, 24, 28, 31]
+const PROJECT_STEPS       = [20, 24, 28, 32, 35]
 
-// Scroll ratio at which the swoop ends — puts camera clearly inside the stairwell
-const INITIAL_P     = 0.08 + 6 / TOTAL_STEPS
+// Swoop lands exactly at project 1 camera position
+const INITIAL_P     = CAMERA_ANCHOR_STEPS[0] / TOTAL_STEPS
 const INITIAL_ANGLE = INITIAL_P * TOTAL_REVS * Math.PI * 2
 const INITIAL_DEPTH = INITIAL_P * TOTAL_DEPTH
 
-// Camera anchor positions: hero entry + one per project
-const ANCHORS = [INITIAL_P, ...CAMERA_ANCHOR_STEPS.map(s => s / TOTAL_STEPS)]
+// 6 anchors → 5 scroll sections. Section N moves camera from project N to project N+1.
+// No wasted "intro" section — scroll 0 = project 1, scroll 1 = project 2, etc.
+const ANCHORS = [
+  ...CAMERA_ANCHOR_STEPS.map(s => s / TOTAL_STEPS),
+  PROJECT_STEPS[PROJECT_STEPS.length - 1] / TOTAL_STEPS,
+]
 
 function easeInOut(t: number) {
   return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
@@ -77,29 +84,24 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
     camera.lookAt(0, 2, 0)
 
     // ── Lighting ──────────────────────────────────────────────────────────
-
-    // Hemisphere: warm sky above, warm tan from ground bounce — makes every
-    // surface feel like it lives in a real environment rather than flat ambient
     scene.add(new THREE.HemisphereLight(0xfff8e8, 0xc8a46a, 0.55))
 
-    // Sun — DirectionalLight has no visible origin; parallel rays from directly
-    // above, like light falling through a skylight. Covers the full scene.
     const sun = new THREE.DirectionalLight(0xfff9ee, 2.8)
-    sun.position.set(2, 40, 4)          // high up — angle barely noticeable
+    sun.position.set(2, 40, 4)
     sun.target.position.set(0, 0, 0)
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
-    sun.shadow.camera.left   = -12
-    sun.shadow.camera.right  =  12
-    sun.shadow.camera.top    =  12
-    sun.shadow.camera.bottom = -12
+    sun.shadow.camera.left   = -15
+    sun.shadow.camera.right  =  15
+    sun.shadow.camera.top    =  15
+    sun.shadow.camera.bottom = -15
     sun.shadow.camera.near   = 1
     sun.shadow.camera.far    = 60
     sun.shadow.bias = -0.0008
     scene.add(sun)
     scene.add(sun.target)
 
-    // Warm sconces along the descent — now the primary mood light lower down
+    // Warm sconces along the descent
     for (let i = 1; i < 6; i++) {
       const t     = i / 5
       const angle = t * TOTAL_REVS * Math.PI * 2
@@ -113,29 +115,8 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
     const manager = new THREE.LoadingManager()
     manager.onStart    = () => onStage?.('Loading textures')
     manager.onProgress = (_url, loaded, total) => onProgress?.(loaded / total)
-    manager.onLoad     = () => {
-      onStage?.('Compiling shaders')
-      renderer.compileAsync(scene, camera).then(() => {
-        onStage?.('Warming up renderer')
-        // Render several frames behind the overlay to flush all lazy GPU uploads
-        // before revealing the scene to the user.
-        let remaining = 12
-        const warmup = () => {
-          renderer.render(scene, camera)
-          if (--remaining > 0) {
-            requestAnimationFrame(warmup)
-          } else {
-            onLoaded?.()
-            // Kick off the cinematic swoop — starts as the overlay fades out
-            swoop.active = true
-            swoop.t0     = performance.now()
-          }
-        }
-        requestAnimationFrame(warmup)
-      })
-    }
+    // manager.onLoad is set after texture loads are queued below
 
-    // Prevent scrolling during the swoop intro; restored when swoop ends
     document.body.style.overflow = 'hidden'
 
     const tl  = new THREE.TextureLoader(manager)
@@ -160,7 +141,7 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       metalness: 0,
     })
 
-    // Cracked concrete — column (4 tiles around circumference, 8 down height)
+    // Cracked concrete — column
     const colMat = new THREE.MeshStandardMaterial({
       map:          tex(tl,  concreteDiff,  4, 8, true),
       normalMap:    tex(exr, concreteNor,   4, 8),
@@ -168,8 +149,7 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       metalness: 0,
     })
 
-    // White sandstone bricks — outer wall (12 tiles around, 5 down)
-    // normalScale Y negated for BackSide so bumps light correctly from inside
+    // White sandstone bricks — outer wall
     const wallMat = new THREE.MeshStandardMaterial({
       map:          tex(tl,  stoneDiff,  12, 5, true),
       normalMap:    tex(exr, stoneNor,   12, 5),
@@ -178,41 +158,61 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       metalness: 0,
       side: THREE.BackSide,
     })
+
     // Brushed dark metal railing
     const railMat = new THREE.MeshStandardMaterial({ color: 0x1e1e20, roughness: 0.12, metalness: 0.95 })
-    const texture = new THREE.TextureLoader().load(maratUrl)
-    texture.colorSpace = THREE.SRGBColorSpace
-    // Flip horizontally so image reads correctly when viewed from inside the cylinder
-    texture.wrapS = THREE.RepeatWrapping
-    texture.repeat.x = -1
-    texture.offset.x = 1
-    const canvMat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.8, side: THREE.DoubleSide })
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0xd8d0c4, roughness: 0.8 })
+
+    // Floor — pine wood matching the treads (tiled across the circle)
+    const floorMat = new THREE.MeshStandardMaterial({
+      map:          tex(tl,  pineDiff,  6, 6, true),
+      normalMap:    tex(exr, pineNor,   6, 6),
+      roughnessMap: tex(exr, pineRough, 6, 6),
+      metalness: 0,
+    })
+
+    // ── Load project painting textures via the manager ─────────────────────
+    // Textures are ready by manager.onLoad; paintings are built there so we
+    // can read image.width/height for correct aspect ratios.
+    function applyFlip(t: THREE.Texture) {
+      t.wrapS = THREE.RepeatWrapping
+      t.repeat.x = -1
+      t.offset.x = 1
+      return t
+    }
+
+    const fit1Tex  = tl.load(fitpicify1Url);  fit1Tex.colorSpace  = THREE.SRGBColorSpace
+    const fit2Tex  = tl.load(fitpicify2Url);  fit2Tex.colorSpace  = THREE.SRGBColorSpace
+    const fastTex  = tl.load(fastFashionUrl); applyFlip(fastTex);  fastTex.colorSpace  = THREE.SRGBColorSpace
+    const nosTex   = tl.load(noscrollUrl);    applyFlip(nosTex);   nosTex.colorSpace   = THREE.SRGBColorSpace
+    const tttTex   = tl.load(tictactoeUrl);   applyFlip(tttTex);   tttTex.colorSpace   = THREE.SRGBColorSpace
+    const mutTex   = tl.load(mutectUrl);      applyFlip(mutTex);   mutTex.colorSpace   = THREE.SRGBColorSpace
 
     // ── Central column ────────────────────────────────────────────────────
-    const colGeo = new THREE.CylinderGeometry(INNER_R, INNER_R, TOTAL_DEPTH + 6, 20)
-    const col = new THREE.Mesh(colGeo, colMat)
+    const col = new THREE.Mesh(
+      new THREE.CylinderGeometry(INNER_R, INNER_R, TOTAL_DEPTH + 6, 20),
+      colMat,
+    )
     col.position.y = -TOTAL_DEPTH / 2
-    col.castShadow    = true
-    col.receiveShadow = true
+    col.castShadow = col.receiveShadow = true
     scene.add(col)
 
     // ── Outer wall ────────────────────────────────────────────────────────
-    const wallGeo = new THREE.CylinderGeometry(OUTER_R + 0.6, OUTER_R + 0.6, TOTAL_DEPTH + 6, 40, 1, true)
-    const wall = new THREE.Mesh(wallGeo, wallMat)
+    const wall = new THREE.Mesh(
+      new THREE.CylinderGeometry(OUTER_R + 0.6, OUTER_R + 0.6, TOTAL_DEPTH + 6, 40, 1, true),
+      wallMat,
+    )
     wall.position.y = -TOTAL_DEPTH / 2
     wall.receiveShadow = true
     scene.add(wall)
 
-    // floor cap
-    const floorGeo = new THREE.CircleGeometry(OUTER_R + 0.6, 40)
-    const floor = new THREE.Mesh(floorGeo, floorMat)
+    // ── Floor cap — pine texture matches treads ────────────────────────────
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(OUTER_R + 0.6, 40), floorMat)
     floor.rotation.x = -Math.PI / 2
     floor.position.y = -TOTAL_DEPTH - 0.5
     floor.receiveShadow = true
     scene.add(floor)
 
-    // ── Steps + posts — collected then merged into 3 draw calls ───────────
+    // ── Steps + posts — merged into 3 draw calls ──────────────────────────
     const treadTemplate = new THREE.BoxGeometry(STEP_WIDTH, 0.1, 1.9)
     const riserTemplate = new THREE.BoxGeometry(STEP_WIDTH, STEP_RISE - 0.1, 0.08)
     const postTemplate  = new THREE.CylinderGeometry(0.04, 0.04, 1.1, 8)
@@ -230,7 +230,6 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       const y     = -i * STEP_RISE
       const rot   = quat.setFromEuler(new THREE.Euler(0, -angle, 0))
 
-      // Tread
       const tg = treadTemplate.clone()
       tg.applyMatrix4(mat4.compose(
         new THREE.Vector3(Math.cos(angle) * MID_R, y, Math.sin(angle) * MID_R),
@@ -238,7 +237,6 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       ))
       treadGeos.push(tg)
 
-      // Riser
       const rg = riserTemplate.clone()
       rg.applyMatrix4(mat4.compose(
         new THREE.Vector3(
@@ -250,7 +248,6 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       ))
       riserGeos.push(rg)
 
-      // Post (cylinder — no rotation needed)
       const pg = postTemplate.clone()
       pg.applyMatrix4(mat4.compose(
         new THREE.Vector3(Math.cos(angle) * (OUTER_R - 0.9), y + 0.55, Math.sin(angle) * (OUTER_R - 0.9)),
@@ -259,7 +256,6 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       postGeos.push(pg)
     }
 
-    // One mesh per group — 3 draw calls instead of 90
     const mergedTreads = new THREE.Mesh(mergeGeometries(treadGeos), stepMat)
     mergedTreads.castShadow = mergedTreads.receiveShadow = true
     scene.add(mergedTreads)
@@ -285,78 +281,139 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       ))
     }
     const railCurve = new THREE.CatmullRomCurve3(railPts)
-    const railGeo   = new THREE.TubeGeometry(railCurve, TOTAL_STEPS * 6, 0.045, 8, false)
-    const rail = new THREE.Mesh(railGeo, railMat)
+    const rail = new THREE.Mesh(
+      new THREE.TubeGeometry(railCurve, TOTAL_STEPS * 6, 0.045, 8, false),
+      railMat,
+    )
     rail.castShadow = true
     scene.add(rail)
 
-    // ── Paintings (curved arcs on the outer wall) ─────────────────────────
-    const PW      = 3.8    // painting width in world units
-    const PH      = 2.5    // painting height in world units
-    const FT      = 0.14   // frame bar thickness
-    const SEGS    = 32     // arc smoothness
-    const PAINT_R = OUTER_R + 0.57   // canvas sits just inside the wall
-    const FRAME_R = OUTER_R + 0.50   // frame sits proud of canvas (closer to centre)
-
-    const frameMatCurved = new THREE.MeshStandardMaterial({
-      color: 0xb8925a, roughness: 0.2, metalness: 0.65, side: THREE.BackSide,
-    })
-
-    // Canvas meshes collected for click raycasting
+    // ── Canvas meshes for raycasting (built in manager.onLoad) ────────────
     const paintMeshes: THREE.Mesh[] = []
 
-    PROJECT_STEPS.forEach((stepIdx, paintIdx) => {
-      const angle = (stepIdx / STEPS_PER_REV) * Math.PI * 2
-      // Y: midpoint of the vertical span between this painting's floor level and the
-      // next — i.e. halfway between two full levels of the staircase (not two steps).
-      const y = -(paintIdx + 0.5) * TOTAL_DEPTH / PROJECT_STEPS.length
+    // ── Swoop intro state (referenced in manager.onLoad) ──────────────────
+    const swoop = { active: false, t0: 0 }
+    const swoopFromPos  = new THREE.Vector3(3, 10, 0)
+    const swoopFromLook = new THREE.Vector3(OUTER_R - 0.4, 8, 0)
+    const swoopToPos    = new THREE.Vector3(Math.cos(INITIAL_ANGLE) * CAMERA_R, -INITIAL_DEPTH + EYE_H, Math.sin(INITIAL_ANGLE) * CAMERA_R)
+    const swoopToLook   = new THREE.Vector3(Math.cos(INITIAL_ANGLE + 0.45) * 2.2, -INITIAL_DEPTH + EYE_H - 0.55, Math.sin(INITIAL_ANGLE + 0.45) * 2.2)
+    const camLerped     = { pos: swoopToPos.clone(), look: swoopToLook.clone() }
+    const targetPos     = new THREE.Vector3()
+    const targetLook    = new THREE.Vector3()
 
-      const paintArc = PW / PAINT_R
-      const sideArc  = FT / FRAME_R
-      const topArc   = (PW + FT * 2) / FRAME_R
+    // ── manager.onLoad: build paintings then compile shaders ──────────────
+    manager.onLoad = () => {
+      onStage?.('Building scene')
 
-      // Canvas
-      const canvasGeo = new THREE.CylinderGeometry(
-        PAINT_R, PAINT_R, PH, SEGS, 1, true,
-        angle - paintArc / 2, paintArc,
-      )
-      const canvas = new THREE.Mesh(canvasGeo, canvMat)
-      canvas.position.y = y
-      scene.add(canvas)
-      paintMeshes.push(canvas)
+      // Composite fitpicify1 + fitpicify2 side by side.
+      // Draw img2 left / img1 right so that after the horizontal flip applied
+      // to all painting textures, fitpicify1 appears on the LEFT and fitpicify2
+      // on the RIGHT as viewed from inside the cylinder.
+      const img1 = fit1Tex.image as HTMLImageElement
+      const img2 = fit2Tex.image as HTMLImageElement
+      const compW = img2.width + img1.width
+      const compH = Math.max(img1.height, img2.height)
+      const compCanvas = document.createElement('canvas')
+      compCanvas.width  = compW
+      compCanvas.height = compH
+      const ctx = compCanvas.getContext('2d')!
+      ctx.drawImage(img2, 0, 0)
+      ctx.drawImage(img1, img2.width, 0)
+      const fitTex = new THREE.CanvasTexture(compCanvas)
+      fitTex.colorSpace = THREE.SRGBColorSpace
+      applyFlip(fitTex)
 
-      // Frame — top bar
-      const topGeo = new THREE.CylinderGeometry(
-        FRAME_R, FRAME_R, FT, SEGS, 1, true,
-        angle - topArc / 2, topArc,
-      )
-      const topBar = new THREE.Mesh(topGeo, frameMatCurved)
-      topBar.position.y = y + PH / 2 + FT / 2
-      scene.add(topBar)
+      // Per-painting: texture, arc width (world units)
+      // FitPicifiy gets 2× width to show both images at a reasonable scale
+      const PW      = 3.8
+      const PW_FIT  = PW * 2
+      const FT      = 0.14
+      const SEGS    = 32
+      const PAINT_R = OUTER_R + 0.57
+      const FRAME_R = OUTER_R + 0.50
 
-      // Frame — bottom bar
-      const botBar = topBar.clone()
-      botBar.position.y = y - PH / 2 - FT / 2
-      scene.add(botBar)
+      const paintingDefs = [
+        { tex: fitTex, pw: PW_FIT, ar: compW / compH },
+        { tex: fastTex, pw: PW, ar: (fastTex.image as HTMLImageElement).width / (fastTex.image as HTMLImageElement).height },
+        { tex: nosTex,  pw: PW, ar: (nosTex.image  as HTMLImageElement).width / (nosTex.image  as HTMLImageElement).height },
+        { tex: tttTex,  pw: PW, ar: (tttTex.image  as HTMLImageElement).width / (tttTex.image  as HTMLImageElement).height },
+        { tex: mutTex,  pw: PW, ar: (mutTex.image  as HTMLImageElement).width / (mutTex.image  as HTMLImageElement).height || 16/9 },
+      ]
 
-      // Frame — left bar
-      const leftGeo = new THREE.CylinderGeometry(
-        FRAME_R, FRAME_R, PH + FT * 2, SEGS, 1, true,
-        angle - paintArc / 2 - sideArc, sideArc,
-      )
-      const leftBar = new THREE.Mesh(leftGeo, frameMatCurved)
-      leftBar.position.y = y
-      scene.add(leftBar)
+      const frameMatCurved = new THREE.MeshStandardMaterial({
+        color: 0xb8925a, roughness: 0.2, metalness: 0.65, side: THREE.BackSide,
+      })
 
-      // Frame — right bar
-      const rightGeo = new THREE.CylinderGeometry(
-        FRAME_R, FRAME_R, PH + FT * 2, SEGS, 1, true,
-        angle + paintArc / 2, sideArc,
-      )
-      const rightBar = new THREE.Mesh(rightGeo, frameMatCurved)
-      rightBar.position.y = y
-      scene.add(rightBar)
-    })
+      PROJECT_STEPS.forEach((stepIdx, paintIdx) => {
+        const angle = (stepIdx / STEPS_PER_REV) * Math.PI * 2
+        const y     = -(paintIdx + 0.5) * TOTAL_DEPTH / PROJECT_STEPS.length
+
+        const { tex: paintTex, pw, ar } = paintingDefs[paintIdx]
+        const ph = pw / ar
+
+        const paintArc = pw / PAINT_R
+        const sideArc  = FT / FRAME_R
+        const topArc   = (pw + FT * 2) / FRAME_R
+
+        // Canvas with emissive so the painting illuminates itself
+        const canvasMat = new THREE.MeshStandardMaterial({
+          map:             paintTex,
+          emissiveMap:     paintTex,
+          emissive:        new THREE.Color(0xffffff),
+          emissiveIntensity: 0.35,
+          roughness:       0.7,
+          side:            THREE.DoubleSide,
+        })
+
+        const canvasGeo = new THREE.CylinderGeometry(PAINT_R, PAINT_R, ph, SEGS, 1, true, angle - paintArc / 2, paintArc)
+        const canvas = new THREE.Mesh(canvasGeo, canvasMat)
+        canvas.position.y = y
+        scene.add(canvas)
+        paintMeshes.push(canvas)
+
+        // Frame bars
+        const topGeo = new THREE.CylinderGeometry(FRAME_R, FRAME_R, FT, SEGS, 1, true, angle - topArc / 2, topArc)
+        const topBar = new THREE.Mesh(topGeo, frameMatCurved)
+        topBar.position.y = y + ph / 2 + FT / 2
+        scene.add(topBar)
+
+        const botBar = topBar.clone()
+        botBar.position.y = y - ph / 2 - FT / 2
+        scene.add(botBar)
+
+        const leftGeo = new THREE.CylinderGeometry(FRAME_R, FRAME_R, ph + FT * 2, SEGS, 1, true, angle - paintArc / 2 - sideArc, sideArc)
+        const leftBar = new THREE.Mesh(leftGeo, frameMatCurved)
+        leftBar.position.y = y
+        scene.add(leftBar)
+
+        const rightGeo = new THREE.CylinderGeometry(FRAME_R, FRAME_R, ph + FT * 2, SEGS, 1, true, angle + paintArc / 2, sideArc)
+        const rightBar = new THREE.Mesh(rightGeo, frameMatCurved)
+        rightBar.position.y = y
+        scene.add(rightBar)
+
+        // Point light — painting illuminates surrounding stone wall
+        const pLight = new THREE.PointLight(0xfff0cc, 1.5, 8)
+        pLight.position.set(Math.cos(angle) * 5.5, y, Math.sin(angle) * 5.5)
+        scene.add(pLight)
+      })
+
+      onStage?.('Compiling shaders')
+      renderer.compileAsync(scene, camera).then(() => {
+        onStage?.('Warming up renderer')
+        let remaining = 12
+        const warmup = () => {
+          renderer.render(scene, camera)
+          if (--remaining > 0) {
+            requestAnimationFrame(warmup)
+          } else {
+            onLoaded?.()
+            swoop.active = true
+            swoop.t0     = performance.now()
+          }
+        }
+        requestAnimationFrame(warmup)
+      })
+    }
 
     // ── Scroll → camera ───────────────────────────────────────────────────
     const scroll = { y: 0 }
@@ -403,25 +460,10 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
     }
     window.addEventListener('resize', onResize)
 
-    // ── Swoop intro (time-based, triggered after warmup) ──────────────────
-    const SWOOP_MS    = 2200
-    const SWOOP_FOV   = 88
-    const NORMAL_FOV  = 72
-    const swoopFromPos  = new THREE.Vector3(3, 10, 0)
-    // Look toward the outer wall, mostly horizontal — fills frame with brick
-    const swoopFromLook = new THREE.Vector3(OUTER_R - 0.4, 8, 0)
-    const swoopToPos    = new THREE.Vector3(Math.cos(INITIAL_ANGLE) * CAMERA_R, -INITIAL_DEPTH + EYE_H, Math.sin(INITIAL_ANGLE) * CAMERA_R)
-    const swoopToLook   = new THREE.Vector3(Math.cos(INITIAL_ANGLE + 0.45) * 2.2, -INITIAL_DEPTH + EYE_H - 0.55, Math.sin(INITIAL_ANGLE + 0.45) * 2.2)
-
-    // Mutable state — lives in the closure, not React state
-    const swoop = { active: false, t0: 0 }
-
-    // Smoothly lerped camera — decouples snap-scroll positions from camera jerk
-    const camLerped = { pos: swoopToPos.clone(), look: swoopToLook.clone() }
-    const targetPos  = new THREE.Vector3()
-    const targetLook = new THREE.Vector3()
-
     // ── Animation loop ────────────────────────────────────────────────────
+    const SWOOP_MS   = 2200
+    const SWOOP_FOV  = 88
+    const NORMAL_FOV = 72
     let frameId: number
     const tmpLook = new THREE.Vector3()
 
@@ -429,9 +471,9 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       frameId = requestAnimationFrame(animate)
 
       if (swoop.active) {
-        // ── Swoop: time-driven cinematic intro ────────────────────────────
-        const raw   = Math.min((performance.now() - swoop.t0) / SWOOP_MS, 1)
-        const t     = 1 - Math.pow(1 - raw, 3)   // easeOutCubic — fast then settle
+        // Time-driven cinematic intro
+        const raw = Math.min((performance.now() - swoop.t0) / SWOOP_MS, 1)
+        const t   = 1 - Math.pow(1 - raw, 3)   // easeOutCubic
 
         camera.position.lerpVectors(swoopFromPos, swoopToPos, t)
         tmpLook.lerpVectors(swoopFromLook, swoopToLook, t)
@@ -444,14 +486,13 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
           document.body.style.overflow = ''
           window.scrollTo({ top: 0, behavior: 'instant' })
           scroll.y = 0
-          // Sync lerped camera so scroll section starts with no jump
           camLerped.pos.copy(swoopToPos)
           camLerped.look.copy(swoopToLook)
         }
 
       } else {
-        // ── Scroll-driven camera — section-based, one anchor per project ──
-        const maxScroll  = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
+        // Scroll-driven camera — one anchor per project
+        const maxScroll   = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
         const numSections = ANCHORS.length - 1
         const rawSection  = Math.min(scroll.y / maxScroll, 1) * numSections
         const sIdx        = Math.min(Math.floor(rawSection), numSections - 1)
@@ -464,9 +505,12 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
         targetPos.set(Math.cos(angle) * CAMERA_R, -depth + EYE_H, Math.sin(angle) * CAMERA_R)
         targetLook.set(Math.cos(angle + 0.45) * 2.2, -depth + EYE_H - 0.55, Math.sin(angle + 0.45) * 2.2)
 
-        // Lerp for smooth camera motion on scroll-snap jumps
-        camLerped.pos.lerp(targetPos, 0.08)
-        camLerped.look.lerp(targetLook, 0.08)
+        // Snap instantly when far away (fast scroll), smooth when close.
+        // Prevents camera swimming through walls on multi-section jumps.
+        const dist = camLerped.pos.distanceTo(targetPos)
+        const lf   = dist > 4.0 ? 1.0 : 0.12
+        camLerped.pos.lerp(targetPos, lf)
+        camLerped.look.lerp(targetLook, lf)
         camera.position.copy(camLerped.pos)
         camera.lookAt(camLerped.look)
 
