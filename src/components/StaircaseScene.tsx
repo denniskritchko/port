@@ -398,19 +398,18 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
         if (raw >= 1) {
           swoop.active = false
           document.body.style.overflow = ''
-          const maxScroll = document.documentElement.scrollHeight - window.innerHeight
-          const target    = INITIAL_P * maxScroll
-          window.scrollTo({ top: target, behavior: 'instant' })
-          scroll.y = target
+          window.scrollTo({ top: 0, behavior: 'instant' })
+          scroll.y = 0
         }
 
       } else {
         // ── Scroll-driven camera ──────────────────────────────────────────
+        // Remap so scroll=0 lands at INITIAL_DEPTH (walls fill screen) and
+        // scroll=max reaches the bottom of the stairwell.
         const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
         const overall   = Math.min(scroll.y / maxScroll, 1)
-        const p     = overall
-        const angle = p * TOTAL_REVS * Math.PI * 2
-        const depth = p * TOTAL_DEPTH
+        const angle = INITIAL_ANGLE + overall * (TOTAL_REVS * Math.PI * 2 - INITIAL_ANGLE)
+        const depth = INITIAL_DEPTH + overall * (TOTAL_DEPTH - INITIAL_DEPTH)
 
         camera.position.set(
           Math.cos(angle) * CAMERA_R,
