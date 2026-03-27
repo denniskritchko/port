@@ -26,8 +26,11 @@ const CAMERA_R       = 4.5    // orbit radius for the camera
 const EYE_H          = 3.2    // eye height above tread
 const TOTAL_DEPTH    = TOTAL_STEPS * STEP_RISE       // 19.5 total descent
 
-// One painting per project, evenly spaced down the stairwell
-const PROJECT_STEPS = [10, 14, 18, 22, 26]
+// Camera stops (one per project section). At each stop the camera's forward ray
+// hits the wall ~4 steps ahead (camera lookAt offset ≈ 2.55 rad ≈ 4.05 steps).
+const CAMERA_ANCHOR_STEPS = [10, 14, 18, 22, 25]
+// Painting positions: 4 steps ahead of their viewing camera so they're centered.
+const PROJECT_STEPS       = [14, 18, 22, 26, 29]
 
 // Scroll ratio at which the swoop ends — puts camera clearly inside the stairwell
 const INITIAL_P     = 0.08 + 6 / TOTAL_STEPS
@@ -35,19 +38,20 @@ const INITIAL_ANGLE = INITIAL_P * TOTAL_REVS * Math.PI * 2
 const INITIAL_DEPTH = INITIAL_P * TOTAL_DEPTH
 
 // Camera anchor positions: hero entry + one per project
-const ANCHORS = [INITIAL_P, ...PROJECT_STEPS.map(s => s / TOTAL_STEPS)]
+const ANCHORS = [INITIAL_P, ...CAMERA_ANCHOR_STEPS.map(s => s / TOTAL_STEPS)]
 
 function easeInOut(t: number) {
   return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
 }
 
 interface Props {
-  onProgress?: (p: number) => void
-  onStage?:    (stage: string) => void
-  onLoaded?: () => void
+  onProgress?:     (p: number) => void
+  onStage?:        (stage: string) => void
+  onLoaded?:       () => void
+  onProjectClick?: (index: number) => void
 }
 
-export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props) {
+export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjectClick }: Props) {
   const mountRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -183,7 +187,7 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
     texture.wrapS = THREE.RepeatWrapping
     texture.repeat.x = -1
     texture.offset.x = 1
-    const canvMat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.8, side: THREE.BackSide })
+    const canvMat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.8, side: THREE.DoubleSide })
     const floorMat = new THREE.MeshStandardMaterial({ color: 0xd8d0c4, roughness: 0.8 })
 
     // ── Central column ────────────────────────────────────────────────────
@@ -299,10 +303,14 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
       color: 0xb8925a, roughness: 0.2, metalness: 0.65, side: THREE.BackSide,
     })
 
-    PROJECT_STEPS.forEach((stepIdx) => {
-      const angle    = (stepIdx / STEPS_PER_REV) * Math.PI * 2
-      // Center painting at eye level for this step
-      const y        = -stepIdx * STEP_RISE + EYE_H - 0.3
+    // Canvas meshes collected for click raycasting
+    const paintMeshes: THREE.Mesh[] = []
+
+    PROJECT_STEPS.forEach((stepIdx, paintIdx) => {
+      const angle = (stepIdx / STEPS_PER_REV) * Math.PI * 2
+      // Y aligned with the VIEWING camera's depth (CAMERA_ANCHOR_STEPS[paintIdx]),
+      // not the painting's own step — keeps it at eye level for that scroll section.
+      const y     = -CAMERA_ANCHOR_STEPS[paintIdx] * STEP_RISE + EYE_H - 0.3
 
       const paintArc = PW / PAINT_R                   // arc angle spanning the canvas
       const sideArc  = FT / FRAME_R                   // arc angle for left/right bars
@@ -316,6 +324,7 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
       const canvas = new THREE.Mesh(canvasGeo, canvMat)
       canvas.position.y = y
       scene.add(canvas)
+      paintMeshes.push(canvas)
 
       // Frame — top bar
       const topGeo = new THREE.CylinderGeometry(
@@ -354,6 +363,36 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
     const scroll = { y: 0 }
     const onScroll = () => { scroll.y = window.scrollY }
     window.addEventListener('scroll', onScroll, { passive: true })
+
+    // ── Painting click / hover ────────────────────────────────────────────
+    const raycaster = new THREE.Raycaster()
+    const mouseNDC  = new THREE.Vector2()
+
+    const toNDC = (e: MouseEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect()
+      mouseNDC.x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1
+      mouseNDC.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1
+    }
+
+    const onCanvasClick = (e: MouseEvent) => {
+      toNDC(e)
+      raycaster.setFromCamera(mouseNDC, camera)
+      const hits = raycaster.intersectObjects(paintMeshes)
+      if (hits.length > 0) {
+        const idx = paintMeshes.indexOf(hits[0].object as THREE.Mesh)
+        if (idx >= 0) onProjectClick?.(idx)
+      }
+    }
+
+    const onCanvasMove = (e: MouseEvent) => {
+      toNDC(e)
+      raycaster.setFromCamera(mouseNDC, camera)
+      const hits = raycaster.intersectObjects(paintMeshes)
+      renderer.domElement.style.cursor = hits.length > 0 ? 'pointer' : 'default'
+    }
+
+    renderer.domElement.addEventListener('click',     onCanvasClick)
+    renderer.domElement.addEventListener('mousemove', onCanvasMove)
 
     // ── Resize ────────────────────────────────────────────────────────────
     const onResize = () => {
@@ -446,6 +485,8 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded }: Props)
       cancelAnimationFrame(frameId)
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', onResize)
+      renderer.domElement.removeEventListener('click',     onCanvasClick)
+      renderer.domElement.removeEventListener('mousemove', onCanvasMove)
       document.body.style.overflow = ''
       renderer.dispose()
       mount.removeChild(renderer.domElement)
