@@ -33,7 +33,7 @@ const PAINTING_STEPS = Array.from({ length: 10 }, (_, i) => 2 + i * 3)
 const INTRO_END = 0.12
 
 // Scroll ratio at which the swoop ends — puts camera clearly inside the stairwell
-const INITIAL_P     = 0.08 + 5 / TOTAL_STEPS
+const INITIAL_P     = 0.08 + 6 / TOTAL_STEPS
 const INITIAL_ANGLE = INITIAL_P * TOTAL_REVS * Math.PI * 2
 const INITIAL_DEPTH = INITIAL_P * TOTAL_DEPTH
 

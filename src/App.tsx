@@ -100,7 +100,7 @@ export default function App() {
               border: '1px solid rgba(200,184,154,0.25)',
             }}
           >
-            <p className="text-xs tracking-[0.3em] uppercase mb-8" style={{ color: '#b0a89e' }}>
+            <p className="text-xs tracking-[0.3em] uppercase mb-8" style={{ color: '#2a2520' }}>
               Portfolio
             </p>
             <h1
@@ -110,14 +110,14 @@ export default function App() {
               Dennis<br />
               <span style={{ color: '#8a7f74' }}>Kritchko</span>
             </h1>
-            <p className="mt-6 text-base font-light tracking-wide" style={{ color: '#a09690' }}>
+            <p className="mt-6 text-base font-light tracking-wide" style={{ color: '#2a2520' }}>
               Designer &amp; Developer
             </p>
 
             {/* About */}
             <p
               className="mt-8 text-sm font-light leading-relaxed text-center"
-              style={{ color: '#a09690', maxWidth: 360 }}
+              style={{ color: '#2a2520', maxWidth: 360 }}
             >
               Incoming SWE Intern at Microsoft · Windows &amp; Devices.
               Exploring AI developer tooling and the intersection of fashion and technology.
@@ -136,7 +136,7 @@ export default function App() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs tracking-[0.18em] uppercase transition-opacity duration-300 hover:opacity-40"
-                  style={{ color: '#b0a89e' }}
+                  style={{ color: '#2a2520' }}
                 >
                   {label}
                 </a>
