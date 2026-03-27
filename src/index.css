@@ -4,11 +4,15 @@
   --offwhite: #f7f5f0;
 }
 
+html {
+  scroll-snap-type: y mandatory;
+}
+
 html, body {
   margin: 0;
   padding: 0;
   background-color: var(--offwhite);
-  overflow: hidden;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
