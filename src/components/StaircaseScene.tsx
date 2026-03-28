@@ -49,9 +49,6 @@ const ANCHORS = [
   PROJECT_STEPS[PROJECT_STEPS.length - 1] / TOTAL_STEPS,
 ]
 
-function easeInOut(t: number) {
-  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
-}
 
 interface Props {
   onProgress?:     (p: number) => void
@@ -467,10 +464,13 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
     const SWOOP_FOV  = 88
     const NORMAL_FOV = 72
     let frameId: number
+    let lastTime = performance.now()
     const tmpLook = new THREE.Vector3()
 
-    const animate = () => {
+    const animate = (now: number) => {
       frameId = requestAnimationFrame(animate)
+      const dt = Math.min(now - lastTime, 50)   // cap at 50 ms to avoid jumps after tab switch
+      lastTime = now
 
       if (swoop.active) {
         // Time-driven cinematic intro
@@ -493,12 +493,12 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
         }
 
       } else {
-        // Scroll-driven camera — one anchor per project
+        // Scroll-driven camera — linear across anchors, frame-rate-independent smooth follow
         const maxScroll   = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
         const numSections = ANCHORS.length - 1
         const rawSection  = Math.min(scroll.y / maxScroll, 1) * numSections
         const sIdx        = Math.min(Math.floor(rawSection), numSections - 1)
-        const t           = easeInOut(rawSection - sIdx)
+        const t           = rawSection - sIdx   // linear — no per-section ease
         const p           = ANCHORS[sIdx] + (ANCHORS[sIdx + 1] - ANCHORS[sIdx]) * t
 
         const angle = p * TOTAL_REVS * Math.PI * 2
@@ -507,10 +507,8 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
         targetPos.set(Math.cos(angle) * CAMERA_R, -depth + EYE_H, Math.sin(angle) * CAMERA_R)
         targetLook.set(Math.cos(angle + 0.45) * 2.2, -depth + EYE_H - 0.55, Math.sin(angle + 0.45) * 2.2)
 
-        // Snap instantly when far away (fast scroll), smooth when close.
-        // Prevents camera swimming through walls on multi-section jumps.
-        const dist = camLerped.pos.distanceTo(targetPos)
-        const lf   = dist > 4.0 ? 1.0 : 0.12
+        // Frame-rate-independent smooth follow (half-life ~120 ms → medium speed)
+        const lf = 1 - Math.pow(0.994, dt * 60 / 16.667)
         camLerped.pos.lerp(targetPos, lf)
         camLerped.look.lerp(targetLook, lf)
         camera.position.copy(camLerped.pos)
@@ -524,7 +522,7 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
 
       renderer.render(scene, camera)
     }
-    animate()
+    requestAnimationFrame(animate)
 
     return () => {
       cancelAnimationFrame(frameId)
