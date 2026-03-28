@@ -20,8 +20,8 @@ import mutectUrl      from '../assets/mutect.jpg'
 
 // ─── Staircase constants ───────────────────────────────────────────────────
 const STEPS_PER_REV  = 10
-const TOTAL_STEPS    = 66                              // extended: ~30 extra intro steps above paintings
-const TOTAL_REVS     = TOTAL_STEPS / STEPS_PER_REV    // 6.6 — derived so camera spiral matches steps
+const TOTAL_STEPS    = 86                              // 66 + 20 (2 extra revolutions above about-me)
+const TOTAL_REVS     = TOTAL_STEPS / STEPS_PER_REV    // 8.6
 const STEP_RISE      = 0.65
 const INNER_R        = 1.5
 const OUTER_R        = 7.0
@@ -29,13 +29,14 @@ const MID_R          = (INNER_R + OUTER_R) / 2
 const STEP_WIDTH     = OUTER_R - INNER_R
 const CAMERA_R       = 4.5
 const EYE_H          = 3.2
-const TOTAL_DEPTH    = TOTAL_STEPS * STEP_RISE        // 42.9
+const TOTAL_DEPTH    = TOTAL_STEPS * STEP_RISE        // 55.9
 
-// Landing position for the about-me section (no paintings yet — stairwell stretches above)
-const ABOUT_ANCHOR_STEP   = 16
-// Project camera stops and painting positions (30 steps deeper than before)
-const CAMERA_ANCHOR_STEPS = [46, 50, 54, 58, 61]
-const PROJECT_STEPS       = [50, 54, 58, 62, 65]
+// Landing position for the about-me section
+const ABOUT_ANCHOR_STEP   = 36
+// Camera anchors are 1 step before each painting so paintings appear on the LEFT of the viewport
+// Paintings evenly spaced every 10 steps (1 full revolution) starting just past about-me
+const CAMERA_ANCHOR_STEPS = [41, 51, 61, 71, 81]
+const PROJECT_STEPS       = [42, 52, 62, 72, 82]
 
 // Swoop lands at the about-me anchor; scroll-0 is the about section
 const INITIAL_P     = ABOUT_ANCHOR_STEP / TOTAL_STEPS
@@ -345,7 +346,7 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
 
       PROJECT_STEPS.forEach((stepIdx, paintIdx) => {
         const angle = (stepIdx / STEPS_PER_REV) * Math.PI * 2
-        const y     = -(paintIdx + 0.5) * TOTAL_DEPTH / PROJECT_STEPS.length
+        const y     = -(stepIdx / TOTAL_STEPS) * TOTAL_DEPTH
 
         const { tex: paintTex, pw, ar } = paintingDefs[paintIdx]
         const ph = pw / ar
@@ -464,13 +465,10 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
     const SWOOP_FOV  = 88
     const NORMAL_FOV = 72
     let frameId: number
-    let lastTime = performance.now()
     const tmpLook = new THREE.Vector3()
 
-    const animate = (now: number) => {
+    const animate = (_now: number) => {
       frameId = requestAnimationFrame(animate)
-      const dt = Math.min(now - lastTime, 50)   // cap at 50 ms to avoid jumps after tab switch
-      lastTime = now
 
       if (swoop.active) {
         // Time-driven cinematic intro
@@ -493,13 +491,10 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
         }
 
       } else {
-        // Scroll-driven camera — linear across anchors, frame-rate-independent smooth follow
-        const maxScroll   = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
-        const numSections = ANCHORS.length - 1
-        const rawSection  = Math.min(scroll.y / maxScroll, 1) * numSections
-        const sIdx        = Math.min(Math.floor(rawSection), numSections - 1)
-        const t           = rawSection - sIdx   // linear — no per-section ease
-        const p           = ANCHORS[sIdx] + (ANCHORS[sIdx + 1] - ANCHORS[sIdx]) * t
+        // Scroll-driven camera — uniform speed: scroll fraction maps linearly to staircase position
+        const maxScroll  = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
+        const scrollFrac = Math.min(scroll.y / maxScroll, 1)
+        const p          = ANCHORS[0] + (ANCHORS[ANCHORS.length - 1] - ANCHORS[0]) * scrollFrac
 
         const angle = p * TOTAL_REVS * Math.PI * 2
         const depth = p * TOTAL_DEPTH
@@ -507,12 +502,8 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
         targetPos.set(Math.cos(angle) * CAMERA_R, -depth + EYE_H, Math.sin(angle) * CAMERA_R)
         targetLook.set(Math.cos(angle + 0.45) * 2.2, -depth + EYE_H - 0.55, Math.sin(angle + 0.45) * 2.2)
 
-        // Frame-rate-independent smooth follow (half-life ~120 ms → medium speed)
-        const lf = 1 - Math.pow(0.994, dt * 60 / 16.667)
-        camLerped.pos.lerp(targetPos, lf)
-        camLerped.look.lerp(targetLook, lf)
-        camera.position.copy(camLerped.pos)
-        camera.lookAt(camLerped.look)
+        camera.position.copy(targetPos)
+        camera.lookAt(targetLook)
 
         if (camera.fov !== NORMAL_FOV) {
           camera.fov = NORMAL_FOV
