@@ -116,9 +116,9 @@ export default function App() {
       </Suspense>
 
       {/* Scrollable overlay — pointer-events:none lets clicks reach the Three.js canvas.
-          Ten full-height sections, one per camera anchor in StaircaseScene:
-          hero → five paintings → bottom of the stairs → doorway → bedroom. */}
-      <div className="relative z-10" style={{ height: '1000vh', pointerEvents: 'none' }}>
+          Seven full-height sections, one per camera anchor in StaircaseScene:
+          hero → five paintings → down the last flight and into the bedroom. */}
+      <div className="relative z-10" style={{ height: '700vh', pointerEvents: 'none' }}>
 
         {/* ── Hero ── */}
         <section
@@ -168,10 +168,8 @@ export default function App() {
           />
         ))}
 
-        {/* ── Descent to the floor, then through the door into the bedroom ── */}
-        {['floor', 'doorway', 'threshold', 'bedroom'].map(id => (
-          <section key={id} className="h-screen" style={{ scrollSnapAlign: 'start' }} />
-        ))}
+        {/* ── Down the last flight and straight through the door ── */}
+        <section className="h-screen" style={{ scrollSnapAlign: 'start' }} />
 
       </div>
 

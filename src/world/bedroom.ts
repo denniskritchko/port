@@ -14,7 +14,11 @@
  *
  *   x   -20 (left wall) … +19 (right wall)     — facing into the room
  *   z    12 (doorway end) … 47 (far wall)
- *   y   -90 (floor surface) … -77 (below the ceiling)
+ *   y   -91 (floor surface) … -78 (below the ceiling)
+ *
+ * The y range follows FLOOR_Y in layout.ts, which is set by the depth of the
+ * stairwell — everything here is written relative to it rather than hardcoded,
+ * so changing the number of steps moves the room with the shaft.
  *
  * Block names live in BLOCKS in `src/lib/voxel.ts`; add a new one there and it
  * is instantly available here. Anything with `light` set glows and is baked

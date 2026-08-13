@@ -22,12 +22,13 @@ The whole world is ~31,000 blocks and meshes down to ~86,000 triangles across 25
 ## Features
 
 - Cinematic swoop intro dropping into the top of the tower
-- Ten scroll-snapped sections, one per camera anchor: the hero, five paintings, the foot of the stairs, the doorway, the threshold, the bedroom
+- Seven scroll-snapped sections, one per camera anchor: the hero, the five paintings, and a final one that runs the last flight of stairs and the walk into the bedroom as a single continuous move
 - Project paintings hang in flat alcoves carved out of the round wall, sized to fit the clear span between two passes of the staircase so the stairs never clip a canvas
 - Screenshots are downsampled and given a hand-drawn wooden border, so they read as Minecraft paintings rather than photos on a wall
 - FitPicifiy keeps its double-wide diptych; Mutect links to a demo video as well as GitHub
 - Click any painting to open the project detail modal
-- A double oak door swings open as the camera comes off the stairs and glides into the bedroom
+- The walk out of the tower is a straight line: the step count is chosen so the helix ends on the bearing where its own tangent already points at the doorway, so the camera keeps going and passes through the middle of the opening instead of swinging round to line up
+- A double oak door swings open ahead of the camera as it comes off the stairs
 - Field of view widens on narrow viewports so the paintings stay in frame
 
 ## Editing the bedroom
@@ -47,7 +48,7 @@ Coordinates, facing into the room from the doorway:
 |------|----------------------------------------|
 | `x`  | −20 (left wall) … +19 (right wall)     |
 | `z`  | 12 (doorway end) … 47 (far wall)       |
-| `y`  | −92 (floor surface) … −79 (below ceiling) |
+| `y`  | −91 (floor surface) … −78 (below ceiling) |
 
 Block names live in `BLOCKS` in `src/lib/voxel.ts`; add one there and it is immediately available. Anything with `light` set glows and is baked into the vertex lighting automatically.
 

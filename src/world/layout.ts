@@ -14,7 +14,13 @@
 
 // ─── Stairwell ──────────────────────────────────────────────────────────────
 export const STEPS_PER_REV = 10
-export const TOTAL_STEPS   = 92                 // 9.2 turns down to the floor
+/**
+ * 9.1 turns down to the floor. The count is chosen so the descent ends on a
+ * bearing of 36°, where the helix's own tangent points straight at the doorway
+ * — that is what lets the camera walk out in a straight line instead of having
+ * to swing round to find the door.
+ */
+export const TOTAL_STEPS   = 91
 export const STEP_ANGLE    = (Math.PI * 2) / STEPS_PER_REV
 
 export const INNER_R = 2.6                      // central column radius
@@ -66,8 +72,14 @@ export function paintingSize(aspect: number) {
 /** Bearing shared by all five paintings — one wall, a full turn apart. */
 export const PAINT_ANGLE = PROJECT_ANCHORS[0] * STEP_ANGLE + PAINT_ANGLE_LEAD
 
-/** Fraction of the scroll spent descending, before the walk to the bedroom. */
-export const STAIRS_T = 0.78
+/**
+ * Fraction of the journey spent on the stairs. The remainder is the walk into
+ * the bedroom, which shares the last scroll section with the final part of the
+ * descent — reaching the bottom carries you straight through the door rather
+ * than parking you there. Tuned so the split matches the distance covered by
+ * each, and the camera doesn't visibly speed up on the way in.
+ */
+export const STAIRS_T = 0.89
 
 // ─── Bedroom ────────────────────────────────────────────────────────────────
 // The room hangs off the +Z side of the tower. Interior cells span
@@ -79,11 +91,12 @@ export const ROOM_Z1 = 47
 export const ROOM_H  = 14
 
 /**
- * Doorway punched through the tower wall on the +Z axis. Eight blocks tall is
- * exactly the headroom under the last flight of stairs passing overhead.
+ * Doorway punched through the tower wall on the +Z axis. Seven blocks is
+ * exactly the headroom left by the last flight of stairs crossing overhead —
+ * raise it and the lintel grows into the underside of the treads.
  */
 export const DOOR_HALF_W = 3                    // opening spans cells x = -3 … 2
-export const DOOR_H      = 8
+export const DOOR_H      = 7
 export const DOOR_Z      = 11                   // cell the door leaves hang in
 
 /** Angle of a step, and the walking surface it leads to. */
