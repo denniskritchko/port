@@ -1,55 +1,97 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import { EXRLoader } from 'three/addons/loaders/EXRLoader.js'
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import pineDiff      from '../assets/stained_pine_4k.blend/textures/stained_pine_diff_4k.jpg'
-import pineNor       from '../assets/stained_pine_4k.blend/textures/stained_pine_nor_gl_4k.exr'
-import pineRough     from '../assets/stained_pine_4k.blend/textures/stained_pine_rough_4k.exr'
-import concreteDiff  from '../assets/cracked_concrete_wall_4k.blend/textures/cracked_concrete_wall_diff_4k.jpg'
-import concreteNor   from '../assets/cracked_concrete_wall_4k.blend/textures/cracked_concrete_wall_nor_gl_4k.exr'
-import concreteRough from '../assets/cracked_concrete_wall_4k.blend/textures/cracked_concrete_wall_rough_4k.exr'
-import stoneDiff     from '../assets/white_sandstone_bricks_4k.blend/textures/white_sandstone_bricks_diff_4k.jpg'
-import stoneNor      from '../assets/white_sandstone_bricks_4k.blend/textures/white_sandstone_bricks_nor_gl_4k.exr'
-import stoneRough    from '../assets/white_sandstone_bricks_4k.blend/textures/white_sandstone_bricks_rough_4k.jpg'
-import fitpicify1Url from '../assets/fitpicify1.jpg'
-import fitpicify2Url from '../assets/fitpicify2.jpg'
+import { buildBlockTextures } from '../lib/mcTextures'
+import { createLighting, meshWorld, VoxelWorld } from '../lib/voxel'
+import type { Emitter, MeshResult } from '../lib/voxel'
+import { buildBedroom, buildDoorLeaf } from '../world/bedroom'
+import { doorSwing, journey, tFromScroll } from '../world/journey'
+import { buildTower, carveDoorway, carvePaintingNiche } from '../world/tower'
+import {
+  DOOR_H, DOOR_HALF_W, DOOR_Z, FLOOR_Y, PAINT_ANGLE, PAINT_R, PAINT_Y_LEAD,
+  paintingSize, PROJECT_ANCHORS, TOP_Y,
+} from '../world/layout'
+import fitpicify1Url  from '../assets/fitpicify1.jpg'
+import fitpicify2Url  from '../assets/fitpicify2.jpg'
 import fastFashionUrl from '../assets/Fastfashionanalysis.png'
 import noscrollUrl    from '../assets/noscroll.png'
 import tictactoeUrl   from '../assets/3dtictactoe.jpeg'
 import mutectUrl      from '../assets/mutect.jpg'
 
-// ─── Staircase constants ───────────────────────────────────────────────────
-const STEPS_PER_REV  = 10
-const TOTAL_STEPS    = 86                              // 66 + 20 (2 extra revolutions above about-me)
-const TOTAL_REVS     = TOTAL_STEPS / STEPS_PER_REV    // 8.6
-const STEP_RISE      = 0.65
-const INNER_R        = 1.5
-const OUTER_R        = 7.0
-const MID_R          = (INNER_R + OUTER_R) / 2
-const STEP_WIDTH     = OUTER_R - INNER_R
-const CAMERA_R       = 4.5
-const EYE_H          = 3.2
-const TOTAL_DEPTH    = TOTAL_STEPS * STEP_RISE        // 55.9
+// ─── Painting artwork ───────────────────────────────────────────────────────
+// Project screenshots are downsampled to a low pixel count and drawn inside a
+// hand-painted wooden border, so they read as Minecraft paintings rather than
+// photographs pasted onto a block wall.
 
-// Landing position for the about-me section
-const ABOUT_ANCHOR_STEP   = 36
-// Camera anchors are 1 step before each painting so paintings appear on the LEFT of the viewport
-// Paintings evenly spaced every 10 steps (1 full revolution) starting just past about-me
-const CAMERA_ANCHOR_STEPS = [41, 51, 61, 71, 81]
-const PROJECT_STEPS       = [42, 52, 62, 72, 82]
+const ART_PIXELS = 108   // longest edge of the artwork, in texture pixels
+const ART_BORDER = 4     // frame thickness, in the same pixels
 
-// Swoop lands at the about-me anchor; scroll-0 is the about section
-const INITIAL_P     = ABOUT_ANCHOR_STEP / TOTAL_STEPS
-const INITIAL_ANGLE = INITIAL_P * TOTAL_REVS * Math.PI * 2
-const INITIAL_DEPTH = INITIAL_P * TOTAL_DEPTH
+/** Downsample an image so its longest edge is `maxEdge` pixels. */
+function pixelate(img: HTMLImageElement, maxEdge: number) {
+  const ar = img.width / img.height
+  const w = Math.max(1, Math.round(ar >= 1 ? maxEdge : maxEdge * ar))
+  const h = Math.max(1, Math.round(ar >= 1 ? maxEdge / ar : maxEdge))
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const ctx = c.getContext('2d')!
+  ctx.drawImage(img, 0, 0, w, h)
+  return c
+}
 
-// 7 anchors → 6 scroll sections: about-me → proj1 → proj2 → proj3 → proj4 → proj5 → end
-const ANCHORS = [
-  INITIAL_P,
-  ...CAMERA_ANCHOR_STEPS.map(s => s / TOTAL_STEPS),
-  PROJECT_STEPS[PROJECT_STEPS.length - 1] / TOTAL_STEPS,
-]
+/** Wrap artwork in a bevelled oak border, the way a Minecraft painting is drawn. */
+function frameArtwork(art: HTMLCanvasElement) {
+  const b = ART_BORDER
+  const c = document.createElement('canvas')
+  c.width = art.width + b * 2
+  c.height = art.height + b * 2
+  const ctx = c.getContext('2d')!
 
+  const wood = (v: number) => `rgb(${152 + v},${120 + v},${70 + v})`
+  ctx.fillStyle = wood(0)
+  ctx.fillRect(0, 0, c.width, c.height)
+  for (let y = 0; y < c.height; y++) {
+    for (let x = 0; x < c.width; x++) {
+      if (x >= b && x < c.width - b && y >= b && y < c.height - b) continue
+      const grain = ((x * 7 + y * 13) % 5) - 2
+      const bevel = x < 2 || y < 2 ? 16 : x >= c.width - 2 || y >= c.height - 2 ? -22 : 0
+      ctx.fillStyle = wood(grain * 4 + bevel)
+      ctx.fillRect(x, y, 1, 1)
+    }
+  }
+  // Dark rebate where the canvas sits in the frame.
+  ctx.fillStyle = 'rgb(64,46,24)'
+  ctx.fillRect(b - 1, b - 1, art.width + 2, 1)
+  ctx.fillRect(b - 1, b - 1, 1, art.height + 2)
+  ctx.fillRect(b - 1, b + art.height, art.width + 2, 1)
+  ctx.fillRect(b + art.width, b - 1, 1, art.height + 2)
+
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(art, b, b)
+  return c
+}
+
+/**
+ * Vertical FOV for a viewport shape. Paintings are framed against a 16:9
+ * horizontal field, so on narrower screens the vertical FOV opens up to hold
+ * roughly the same horizontal view rather than cropping the canvas away.
+ */
+const BASE_FOV = 72
+const BASE_ASPECT = 16 / 9
+const H_FOV = 2 * Math.atan(Math.tan((BASE_FOV * Math.PI) / 360) * BASE_ASPECT)
+
+function fovFor(aspect: number) {
+  const v = (2 * Math.atan(Math.tan(H_FOV / 2) / Math.max(aspect, 0.35)) * 180) / Math.PI
+  return Math.min(Math.max(v, BASE_FOV), 100)
+}
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    img.src = url
+  })
+}
 
 interface Props {
   onProgress?:     (p: number) => void
@@ -65,355 +107,192 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
     const mount = mountRef.current!
     let w = mount.clientWidth
     let h = mount.clientHeight
+    let disposed = false
 
     // ── Renderer ──────────────────────────────────────────────────────────
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(w, h)
     renderer.setClearColor(0xf7f5f0)
-    renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
     mount.appendChild(renderer.domElement)
 
-    // ── Scene / Camera ────────────────────────────────────────────────────
+    // ── Scene / camera ────────────────────────────────────────────────────
+    // Everything is lit by baked vertex colour, so the scene carries no lights
+    // at all — exactly how Minecraft renders a chunk.
     const scene = new THREE.Scene()
-    scene.fog = new THREE.Fog(0xf7f5f0, 12, 32)
+    scene.fog = new THREE.Fog(0xf7f5f0, 26, 74)
 
-    const camera = new THREE.PerspectiveCamera(72, w / h, 0.1, 80)
-    camera.position.set(4, 18, 8)
-    camera.lookAt(0, 2, 0)
-
-    // ── Lighting ──────────────────────────────────────────────────────────
-    scene.add(new THREE.HemisphereLight(0xfff8e8, 0xc8a46a, 0.55))
-
-    const sun = new THREE.DirectionalLight(0xfff9ee, 2.8)
-    sun.position.set(2, 40, 4)
-    sun.target.position.set(0, 0, 0)
-    sun.castShadow = true
-    sun.shadow.mapSize.set(2048, 2048)
-    sun.shadow.camera.left   = -15
-    sun.shadow.camera.right  =  15
-    sun.shadow.camera.top    =  15
-    sun.shadow.camera.bottom = -15
-    sun.shadow.camera.near   = 1
-    sun.shadow.camera.far    = 60
-    sun.shadow.bias = -0.0008
-    scene.add(sun)
-    scene.add(sun.target)
-
-    // Warm sconces along the descent
-    for (let i = 1; i < 6; i++) {
-      const t     = i / 5
-      const angle = t * TOTAL_REVS * Math.PI * 2
-      const y     = -t * TOTAL_DEPTH
-      const l     = new THREE.PointLight(0xffb84a, 0.9, 9)
-      l.position.set(Math.cos(angle) * (OUTER_R - 0.8), y + 2.0, Math.sin(angle) * (OUTER_R - 0.8))
-      scene.add(l)
-    }
-
-    // ── Materials ─────────────────────────────────────────────────────────
-    const manager = new THREE.LoadingManager()
-    manager.onStart    = () => onStage?.('Loading textures')
-    manager.onProgress = (_url, loaded, total) => onProgress?.(loaded / total)
-    // manager.onLoad is set after texture loads are queued below
+    const camera = new THREE.PerspectiveCamera(fovFor(w / h), w / h, 0.1, 200)
+    camera.position.set(6, 20, 0)
+    camera.lookAt(0, 4, 0)
 
     document.body.style.overflow = 'hidden'
 
-    const tl  = new THREE.TextureLoader(manager)
-    const exr = new EXRLoader(manager)
-    const maxAniso = renderer.capabilities.getMaxAnisotropy()
-
-    type AnyLoader = THREE.TextureLoader | EXRLoader
-    function tex(loader: AnyLoader, url: string, ru: number, rv: number, sRGB = false) {
-      const t = loader.load(url)
-      t.wrapS = t.wrapT = THREE.RepeatWrapping
-      t.repeat.set(ru, rv)
-      t.anisotropy = maxAniso
-      if (sRGB) t.colorSpace = THREE.SRGBColorSpace
-      return t
-    }
-
-    // Wood treads — stained pine
-    const stepMat = new THREE.MeshStandardMaterial({
-      map:          tex(tl,  pineDiff,      3, 1, true),
-      normalMap:    tex(exr, pineNor,       3, 1),
-      roughnessMap: tex(exr, pineRough,     3, 1),
-      metalness: 0,
-    })
-
-    // Cracked concrete — column
-    const colMat = new THREE.MeshStandardMaterial({
-      map:          tex(tl,  concreteDiff,  4, 8, true),
-      normalMap:    tex(exr, concreteNor,   4, 8),
-      roughnessMap: tex(exr, concreteRough, 4, 8),
-      metalness: 0,
-    })
-
-    // White sandstone bricks — outer wall
-    const wallMat = new THREE.MeshStandardMaterial({
-      map:          tex(tl,  stoneDiff,  12, 5, true),
-      normalMap:    tex(exr, stoneNor,   12, 5),
-      roughnessMap: tex(tl,  stoneRough, 12, 5),
-      normalScale:  new THREE.Vector2(1, -1),
-      metalness: 0,
-      side: THREE.BackSide,
-    })
-
-    // Brushed dark metal railing
-    const railMat = new THREE.MeshStandardMaterial({ color: 0x1e1e20, roughness: 0.12, metalness: 0.95 })
-
-    // Floor — pine wood matching the treads (tiled across the circle)
-    const floorMat = new THREE.MeshStandardMaterial({
-      map:          tex(tl,  pineDiff,  6, 6, true),
-      normalMap:    tex(exr, pineNor,   6, 6),
-      roughnessMap: tex(exr, pineRough, 6, 6),
-      metalness: 0,
-    })
-
-    // ── Load project painting textures via the manager ─────────────────────
-    // Textures are ready by manager.onLoad; paintings are built there so we
-    // can read image.width/height for correct aspect ratios.
-    function applyFlip(t: THREE.Texture) {
-      t.wrapS = THREE.RepeatWrapping
-      t.repeat.x = -1
-      t.offset.x = 1
-      return t
-    }
-
-    const fit1Tex  = tl.load(fitpicify1Url);  fit1Tex.colorSpace  = THREE.SRGBColorSpace
-    const fit2Tex  = tl.load(fitpicify2Url);  fit2Tex.colorSpace  = THREE.SRGBColorSpace
-    const fastTex  = tl.load(fastFashionUrl); applyFlip(fastTex);  fastTex.colorSpace  = THREE.SRGBColorSpace
-    const nosTex   = tl.load(noscrollUrl);    applyFlip(nosTex);   nosTex.colorSpace   = THREE.SRGBColorSpace
-    const tttTex   = tl.load(tictactoeUrl);   applyFlip(tttTex);   tttTex.colorSpace   = THREE.SRGBColorSpace
-    const mutTex   = tl.load(mutectUrl);      applyFlip(mutTex);   mutTex.colorSpace   = THREE.SRGBColorSpace
-
-    // ── Central column ────────────────────────────────────────────────────
-    const col = new THREE.Mesh(
-      new THREE.CylinderGeometry(INNER_R, INNER_R, TOTAL_DEPTH + 6, 20),
-      colMat,
-    )
-    col.position.y = -TOTAL_DEPTH / 2
-    col.castShadow = col.receiveShadow = true
-    scene.add(col)
-
-    // ── Outer wall ────────────────────────────────────────────────────────
-    const wall = new THREE.Mesh(
-      new THREE.CylinderGeometry(OUTER_R + 0.6, OUTER_R + 0.6, TOTAL_DEPTH + 6, 40, 1, true),
-      wallMat,
-    )
-    wall.position.y = -TOTAL_DEPTH / 2
-    wall.receiveShadow = true
-    scene.add(wall)
-
-    // ── Floor cap — pine texture matches treads ────────────────────────────
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(OUTER_R + 0.6, 40), floorMat)
-    floor.rotation.x = -Math.PI / 2
-    floor.position.y = -TOTAL_DEPTH - 0.5
-    floor.receiveShadow = true
-    scene.add(floor)
-
-    // ── Steps + posts — merged into 3 draw calls ──────────────────────────
-    const treadTemplate = new THREE.BoxGeometry(STEP_WIDTH, 0.1, 1.9)
-    const riserTemplate = new THREE.BoxGeometry(STEP_WIDTH, STEP_RISE - 0.1, 0.08)
-    const postTemplate  = new THREE.CylinderGeometry(0.04, 0.04, 1.1, 8)
-
-    const treadGeos: THREE.BufferGeometry[] = []
-    const riserGeos: THREE.BufferGeometry[] = []
-    const postGeos:  THREE.BufferGeometry[] = []
-
-    const mat4 = new THREE.Matrix4()
-    const quat = new THREE.Quaternion()
-    const unit = new THREE.Vector3(1, 1, 1)
-
-    for (let i = 0; i < TOTAL_STEPS; i++) {
-      const angle = (i / STEPS_PER_REV) * Math.PI * 2
-      const y     = -i * STEP_RISE
-      const rot   = quat.setFromEuler(new THREE.Euler(0, -angle, 0))
-
-      const tg = treadTemplate.clone()
-      tg.applyMatrix4(mat4.compose(
-        new THREE.Vector3(Math.cos(angle) * MID_R, y, Math.sin(angle) * MID_R),
-        rot.clone(), unit,
-      ))
-      treadGeos.push(tg)
-
-      const rg = riserTemplate.clone()
-      rg.applyMatrix4(mat4.compose(
-        new THREE.Vector3(
-          Math.cos(angle) * MID_R + Math.cos(angle - Math.PI / 2) * 0.95,
-          y - (STEP_RISE - 0.1) / 2,
-          Math.sin(angle) * MID_R + Math.sin(angle - Math.PI / 2) * 0.95,
-        ),
-        rot.clone(), unit,
-      ))
-      riserGeos.push(rg)
-
-      const pg = postTemplate.clone()
-      pg.applyMatrix4(mat4.compose(
-        new THREE.Vector3(Math.cos(angle) * (OUTER_R - 0.9), y + 0.55, Math.sin(angle) * (OUTER_R - 0.9)),
-        new THREE.Quaternion(), unit,
-      ))
-      postGeos.push(pg)
-    }
-
-    const mergedTreads = new THREE.Mesh(mergeGeometries(treadGeos), stepMat)
-    mergedTreads.castShadow = mergedTreads.receiveShadow = true
-    scene.add(mergedTreads)
-
-    const mergedRisers = new THREE.Mesh(mergeGeometries(riserGeos), stepMat)
-    mergedRisers.castShadow = mergedRisers.receiveShadow = true
-    scene.add(mergedRisers)
-
-    const mergedPosts = new THREE.Mesh(mergeGeometries(postGeos), railMat)
-    mergedPosts.castShadow = true
-    scene.add(mergedPosts)
-
-    // ── Helical handrail ──────────────────────────────────────────────────
-    const railPts: THREE.Vector3[] = []
-    for (let i = 0; i <= TOTAL_STEPS * 6; i++) {
-      const t     = i / (TOTAL_STEPS * 6)
-      const angle = t * TOTAL_REVS * Math.PI * 2
-      const y     = -t * TOTAL_DEPTH
-      railPts.push(new THREE.Vector3(
-        Math.cos(angle) * (OUTER_R - 0.9),
-        y + 1.05,
-        Math.sin(angle) * (OUTER_R - 0.9),
-      ))
-    }
-    const railCurve = new THREE.CatmullRomCurve3(railPts)
-    const rail = new THREE.Mesh(
-      new THREE.TubeGeometry(railCurve, TOTAL_STEPS * 6, 0.045, 8, false),
-      railMat,
-    )
-    rail.castShadow = true
-    scene.add(rail)
-
-    // ── Canvas meshes for raycasting (built in manager.onLoad) ────────────
+    // ── Shared state used by the loop ─────────────────────────────────────
     const paintMeshes: THREE.Mesh[] = []
+    const paintProject: number[] = []
+    const doors: THREE.Group[] = []
+    const disposables: MeshResult[] = []
+    const textureList: THREE.Texture[] = []
 
-    // ── Swoop intro state (referenced in manager.onLoad) ──────────────────
     const swoop = { active: false, t0: 0 }
-    const swoopFromPos  = new THREE.Vector3(3, 10, 0)
-    const swoopFromLook = new THREE.Vector3(OUTER_R - 0.4, 8, 0)
-    const swoopToPos    = new THREE.Vector3(Math.cos(INITIAL_ANGLE) * CAMERA_R, -INITIAL_DEPTH + EYE_H, Math.sin(INITIAL_ANGLE) * CAMERA_R)
-    const swoopToLook   = new THREE.Vector3(Math.cos(INITIAL_ANGLE + 0.45) * 2.2, -INITIAL_DEPTH + EYE_H - 0.55, Math.sin(INITIAL_ANGLE + 0.45) * 2.2)
-    const camLerped     = { pos: swoopToPos.clone(), look: swoopToLook.clone() }
-    const targetPos     = new THREE.Vector3()
-    const targetLook    = new THREE.Vector3()
+    const swoopFromPos  = new THREE.Vector3(4.6, TOP_Y + 8, 0)
+    const swoopFromLook = new THREE.Vector3(10.4, TOP_Y + 4, 0)
+    const swoopToPos    = new THREE.Vector3()
+    const swoopToLook   = new THREE.Vector3()
 
-    // ── manager.onLoad: build paintings then compile shaders ──────────────
-    manager.onLoad = () => {
-      onStage?.('Building scene')
+    const tmpPos = new THREE.Vector3()
+    const tmpLook = new THREE.Vector3()
 
-      // Composite fitpicify1 + fitpicify2 side by side.
-      // Draw img1 left / img2 right on the canvas; after the horizontal flip
-      // (repeat.x=-1) applied to all painting textures, this renders as
-      // fitpicify1 on the LEFT and fitpicify2 on the RIGHT from inside the cylinder.
-      const img1 = fit1Tex.image as HTMLImageElement
-      const img2 = fit2Tex.image as HTMLImageElement
-      const compW = img1.width + img2.width
-      const compH = Math.max(img1.height, img2.height)
-      const compCanvas = document.createElement('canvas')
-      compCanvas.width  = compW
-      compCanvas.height = compH
-      const ctx = compCanvas.getContext('2d')!
-      ctx.drawImage(img1, 0, 0)
-      ctx.drawImage(img2, img1.width, 0)
-      const fitTex = new THREE.CanvasTexture(compCanvas)
-      fitTex.colorSpace = THREE.SRGBColorSpace
-      applyFlip(fitTex)
+    // The intro swoop lands exactly on the first scroll anchor.
+    journey(0, swoopToPos, swoopToLook)
 
-      // Per-painting: texture, arc width (world units)
-      // FitPicifiy gets 2× width to show both images at a reasonable scale
-      const PW      = 3.8
-      const PW_FIT  = PW * 2
-      const FT      = 0.14
-      const SEGS    = 32
-      const PAINT_R = OUTER_R + 0.57
-      const FRAME_R = OUTER_R + 0.50
+    // ── Build ─────────────────────────────────────────────────────────────
+    const idle = () => new Promise(resolve => setTimeout(resolve, 16))
 
-      const paintingDefs = [
-        { tex: fitTex, pw: PW_FIT, ar: compW / compH },
-        { tex: fastTex, pw: PW, ar: (fastTex.image as HTMLImageElement).width / (fastTex.image as HTMLImageElement).height },
-        { tex: nosTex,  pw: PW, ar: (nosTex.image  as HTMLImageElement).width / (nosTex.image  as HTMLImageElement).height },
-        { tex: tttTex,  pw: PW, ar: (tttTex.image  as HTMLImageElement).width / (tttTex.image  as HTMLImageElement).height },
-        { tex: mutTex,  pw: PW, ar: (mutTex.image  as HTMLImageElement).width / (mutTex.image  as HTMLImageElement).height || 16/9 },
+    async function build() {
+      onStage?.('Loading artwork')
+      onProgress?.(0.04)
+      const [fit1, fit2, fast, nos, ttt, mut] = await Promise.all(
+        [fitpicify1Url, fitpicify2Url, fastFashionUrl, noscrollUrl, tictactoeUrl, mutectUrl].map(loadImage),
+      )
+      if (disposed) return
+
+      onStage?.('Generating texture pack')
+      onProgress?.(0.16)
+      await idle()
+      const textures = buildBlockTextures(renderer.capabilities.getMaxAnisotropy())
+      textureList.push(...Object.values(textures))
+
+      onStage?.('Placing blocks')
+      onProgress?.(0.3)
+      await idle()
+      const world = new VoxelWorld()
+      buildTower(world)
+
+      onStage?.('Furnishing the bedroom')
+      onProgress?.(0.46)
+      await idle()
+      buildBedroom(world)
+      carveDoorway(world, FLOOR_Y)
+
+      // ── Paintings ──
+      // FitPicifiy keeps its diptych: both screenshots on one canvas.
+      const diptych = document.createElement('canvas')
+      const p1 = pixelate(fit1, ART_PIXELS)
+      const p2 = pixelate(fit2, ART_PIXELS)
+      diptych.width = p1.width + p2.width
+      diptych.height = Math.max(p1.height, p2.height)
+      const dctx = diptych.getContext('2d')!
+      dctx.imageSmoothingEnabled = false
+      dctx.drawImage(p1, 0, 0)
+      dctx.drawImage(p2, p1.width, 0)
+
+      const artworks = [
+        diptych,
+        pixelate(fast, ART_PIXELS),
+        pixelate(nos, ART_PIXELS),
+        pixelate(ttt, ART_PIXELS),
+        pixelate(mut, ART_PIXELS),
       ]
 
-      const frameMatCurved = new THREE.MeshStandardMaterial({
-        color: 0xb8925a, roughness: 0.2, metalness: 0.65, side: THREE.BackSide,
+      const nx = Math.cos(PAINT_ANGLE)
+      const nz = Math.sin(PAINT_ANGLE)
+      const extraLights: Emitter[] = []
+
+      const placed = artworks.map((art, i) => {
+        const framedArt = frameArtwork(art)
+        // Fit inside the clear span between two passes of the staircase.
+        const { width, height } = paintingSize(framedArt.width / framedArt.height)
+        const centreY = -PROJECT_ANCHORS[i] + PAINT_Y_LEAD
+
+        carvePaintingNiche(world, PAINT_ANGLE, centreY, width / 2, height / 2)
+
+        // The canvas washes the alcove and the nearby treads with light.
+        extraLights.push({ x: nx * 9.5, y: centreY, z: nz * 9.5, level: 0.75 })
+
+        return { framedArt, width, height, centreY }
       })
 
-      PROJECT_STEPS.forEach((stepIdx, paintIdx) => {
-        const angle = (stepIdx / STEPS_PER_REV) * Math.PI * 2
-        const y     = -(stepIdx / TOTAL_STEPS) * TOTAL_DEPTH
-
-        const { tex: paintTex, pw, ar } = paintingDefs[paintIdx]
-        const ph = pw / ar
-
-        const paintArc = pw / PAINT_R
-        const sideArc  = FT / FRAME_R
-        const topArc   = (pw + FT * 2) / FRAME_R
-
-        // Canvas with emissive so the painting illuminates itself
-        const canvasMat = new THREE.MeshStandardMaterial({
-          map:             paintTex,
-          emissiveMap:     paintTex,
-          emissive:        new THREE.Color(0xffffff),
-          emissiveIntensity: 0.35,
-          roughness:       0.7,
-          side:            THREE.DoubleSide,
-        })
-
-        const canvasGeo = new THREE.CylinderGeometry(PAINT_R, PAINT_R, ph, SEGS, 1, true, angle - paintArc / 2, paintArc)
-        const canvas = new THREE.Mesh(canvasGeo, canvasMat)
-        canvas.position.y = y
-        scene.add(canvas)
-        paintMeshes.push(canvas)
-
-        // Frame bars
-        const topGeo = new THREE.CylinderGeometry(FRAME_R, FRAME_R, FT, SEGS, 1, true, angle - topArc / 2, topArc)
-        const topBar = new THREE.Mesh(topGeo, frameMatCurved)
-        topBar.position.y = y + ph / 2 + FT / 2
-        scene.add(topBar)
-
-        const botBar = topBar.clone()
-        botBar.position.y = y - ph / 2 - FT / 2
-        scene.add(botBar)
-
-        const leftGeo = new THREE.CylinderGeometry(FRAME_R, FRAME_R, ph + FT * 2, SEGS, 1, true, angle - paintArc / 2 - sideArc, sideArc)
-        const leftBar = new THREE.Mesh(leftGeo, frameMatCurved)
-        leftBar.position.y = y
-        scene.add(leftBar)
-
-        const rightGeo = new THREE.CylinderGeometry(FRAME_R, FRAME_R, ph + FT * 2, SEGS, 1, true, angle + paintArc / 2, sideArc)
-        const rightBar = new THREE.Mesh(rightGeo, frameMatCurved)
-        rightBar.position.y = y
-        scene.add(rightBar)
-
-        // Point light — painting illuminates surrounding stone wall
-        const pLight = new THREE.PointLight(0xfff0cc, 1.5, 8)
-        pLight.position.set(Math.cos(angle) * 5.5, y, Math.sin(angle) * 5.5)
-        scene.add(pLight)
+      onStage?.('Baking light')
+      onProgress?.(0.6)
+      await idle()
+      const lighting = createLighting([...world.emitters(), ...extraLights], {
+        radius: 24,
+        ambient: new THREE.Color(0.3, 0.29, 0.27),
+        sky: new THREE.Color(0.55, 0.55, 0.54),
+        skyTop: TOP_Y + 2,
+        skyBottom: -62,
+        skyFloor: 0.26,
+        torch: new THREE.Color(0.62, 0.42, 0.18),
       })
 
+      onStage?.('Meshing chunks')
+      onProgress?.(0.72)
+      await idle()
+      const mesh = meshWorld(world, textures, lighting)
+      disposables.push(mesh)
+      scene.add(mesh.group)
+
+      // ── Double door, hung so it can swing open on approach ──
+      const leafW = DOOR_HALF_W
+      for (const mirror of [false, true]) {
+        const leaf = buildDoorLeaf(mirror, DOOR_H, leafW)
+        const pivot = new THREE.Group()
+        pivot.position.set(mirror ? DOOR_HALF_W : -DOOR_HALF_W, FLOOR_Y, DOOR_Z)
+        const built = meshWorld(leaf, textures, lighting, pivot.position)
+        disposables.push(built)
+        pivot.add(built.group)
+        scene.add(pivot)
+        doors.push(pivot)
+      }
+
+      // ── Hang the paintings ──
+      for (let i = 0; i < placed.length; i++) {
+        const { framedArt, width, height, centreY } = placed[i]
+        const tex = new THREE.CanvasTexture(framedArt)
+        tex.magFilter = THREE.NearestFilter
+        tex.minFilter = THREE.NearestMipmapLinearFilter
+        tex.colorSpace = THREE.SRGBColorSpace
+        tex.anisotropy = renderer.capabilities.getMaxAnisotropy()
+        textureList.push(tex)
+
+        const canvasMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(width, height),
+          new THREE.MeshBasicMaterial({ map: tex, fog: true }),
+        )
+        canvasMesh.position.set(nx * PAINT_R, centreY, nz * PAINT_R)
+        canvasMesh.lookAt(0, centreY, 0)
+        scene.add(canvasMesh)
+        paintMeshes.push(canvasMesh)
+        paintProject.push(i)
+      }
+
+      // ── Warm up ──
       onStage?.('Compiling shaders')
-      renderer.compileAsync(scene, camera).then(() => {
-        onStage?.('Warming up renderer')
-        let remaining = 12
-        const warmup = () => {
-          renderer.render(scene, camera)
-          if (--remaining > 0) {
-            requestAnimationFrame(warmup)
-          } else {
-            onLoaded?.()
-            swoop.active = true
-            swoop.t0     = performance.now()
-          }
+      onProgress?.(0.88)
+      await renderer.compileAsync(scene, camera)
+      if (disposed) return
+
+      onStage?.('Warming up')
+      onProgress?.(0.96)
+      let remaining = 10
+      const warm = () => {
+        if (disposed) return
+        renderer.render(scene, camera)
+        if (--remaining > 0) {
+          requestAnimationFrame(warm)
+        } else {
+          onProgress?.(1)
+          onLoaded?.()
+          swoop.active = true
+          swoop.t0 = performance.now()
         }
-        requestAnimationFrame(warmup)
-      })
+      }
+      requestAnimationFrame(warm)
     }
+
+    build()
 
     // ── Scroll → camera ───────────────────────────────────────────────────
     const scroll = { y: 0 }
@@ -436,15 +315,15 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       const hits = raycaster.intersectObjects(paintMeshes)
       if (hits.length > 0) {
         const idx = paintMeshes.indexOf(hits[0].object as THREE.Mesh)
-        if (idx >= 0) onProjectClick?.(idx)
+        if (idx >= 0) onProjectClick?.(paintProject[idx])
       }
     }
 
     const onCanvasMove = (e: MouseEvent) => {
       toNDC(e)
       raycaster.setFromCamera(mouseNDC, camera)
-      const hits = raycaster.intersectObjects(paintMeshes)
-      renderer.domElement.style.cursor = hits.length > 0 ? 'pointer' : 'default'
+      renderer.domElement.style.cursor =
+        raycaster.intersectObjects(paintMeshes).length > 0 ? 'pointer' : 'default'
     }
 
     renderer.domElement.addEventListener('click',     onCanvasClick)
@@ -455,6 +334,7 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
       w = mount.clientWidth
       h = mount.clientHeight
       camera.aspect = w / h
+      camera.fov = fovFor(camera.aspect)
       camera.updateProjectionMatrix()
       renderer.setSize(w, h)
     }
@@ -462,23 +342,23 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
 
     // ── Animation loop ────────────────────────────────────────────────────
     const SWOOP_MS   = 2200
-    const SWOOP_FOV  = 88
-    const NORMAL_FOV = 72
-    let frameId: number
-    const tmpLook = new THREE.Vector3()
+    /** The intro swoop pulls the field of view wide, then settles back. */
+    const SWOOP_WIDEN = 16
+    let frameId = 0
+    const swoopLook = new THREE.Vector3()
 
-    const animate = (_now: number) => {
+    const animate = () => {
       frameId = requestAnimationFrame(animate)
 
       if (swoop.active) {
-        // Time-driven cinematic intro
         const raw = Math.min((performance.now() - swoop.t0) / SWOOP_MS, 1)
-        const t   = 1 - Math.pow(1 - raw, 3)   // easeOutCubic
+        const t = 1 - Math.pow(1 - raw, 3)
 
         camera.position.lerpVectors(swoopFromPos, swoopToPos, t)
-        tmpLook.lerpVectors(swoopFromLook, swoopToLook, t)
-        camera.lookAt(tmpLook)
-        camera.fov = THREE.MathUtils.lerp(SWOOP_FOV, NORMAL_FOV, t)
+        swoopLook.lerpVectors(swoopFromLook, swoopToLook, t)
+        camera.lookAt(swoopLook)
+        const settled = fovFor(camera.aspect)
+        camera.fov = THREE.MathUtils.lerp(settled + SWOOP_WIDEN, settled, t)
         camera.updateProjectionMatrix()
 
         if (raw >= 1) {
@@ -486,28 +366,28 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
           document.body.style.overflow = ''
           window.scrollTo({ top: 0, behavior: 'instant' })
           scroll.y = 0
-          camLerped.pos.copy(swoopToPos)
-          camLerped.look.copy(swoopToLook)
+        }
+      } else {
+        // Scroll fraction walks the anchor list, so every snap point lands the
+        // camera exactly on a framed view.
+        const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
+        const t = tFromScroll(scroll.y / maxScroll)
+
+        journey(t, tmpPos, tmpLook)
+        camera.position.copy(tmpPos)
+        camera.lookAt(tmpLook)
+
+        const settled = fovFor(camera.aspect)
+        if (camera.fov !== settled) {
+          camera.fov = settled
+          camera.updateProjectionMatrix()
         }
 
-      } else {
-        // Scroll-driven camera — uniform speed: scroll fraction maps linearly to staircase position
-        const maxScroll  = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
-        const scrollFrac = Math.min(scroll.y / maxScroll, 1)
-        const p          = ANCHORS[0] + (ANCHORS[ANCHORS.length - 1] - ANCHORS[0]) * scrollFrac
-
-        const angle = p * TOTAL_REVS * Math.PI * 2
-        const depth = p * TOTAL_DEPTH
-
-        targetPos.set(Math.cos(angle) * CAMERA_R, -depth + EYE_H, Math.sin(angle) * CAMERA_R)
-        targetLook.set(Math.cos(angle + 0.45) * 2.2, -depth + EYE_H - 0.55, Math.sin(angle + 0.45) * 2.2)
-
-        camera.position.copy(targetPos)
-        camera.lookAt(targetLook)
-
-        if (camera.fov !== NORMAL_FOV) {
-          camera.fov = NORMAL_FOV
-          camera.updateProjectionMatrix()
+        // Swing the doors open as the camera comes off the stairs.
+        if (doors.length === 2) {
+          const open = doorSwing(t)
+          doors[0].rotation.y = -open
+          doors[1].rotation.y = open
         }
       }
 
@@ -516,14 +396,21 @@ export default function StaircaseScene({ onProgress, onStage, onLoaded, onProjec
     requestAnimationFrame(animate)
 
     return () => {
+      disposed = true
       cancelAnimationFrame(frameId)
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', onResize)
       renderer.domElement.removeEventListener('click',     onCanvasClick)
       renderer.domElement.removeEventListener('mousemove', onCanvasMove)
       document.body.style.overflow = ''
+      for (const d of disposables) d.dispose()
+      for (const m of paintMeshes) {
+        m.geometry.dispose()
+        ;(m.material as THREE.Material).dispose()
+      }
+      for (const t of textureList) t.dispose()
       renderer.dispose()
-      mount.removeChild(renderer.domElement)
+      if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement)
     }
   }, [])
 
